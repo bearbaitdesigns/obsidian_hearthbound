@@ -1,0 +1,10 @@
+{
+  "id": "hearthbound-codex",
+  "name": "Hearthbound Codex",
+  "version": "1.0.0",
+  "minAppVersion": "1.4.0",
+  "description": "A cozy, gamified life dashboard: good habits earn XP, bad habits cost XP and HP, quests have measurable milestones, side quests, rewards, stats and a Hall of Triumph.",
+  "author": "bearbaitdesigns",
+  "authorUrl": "https://github.com/bearbaitdesigns",
+  "isDesktopOnly": false
+}

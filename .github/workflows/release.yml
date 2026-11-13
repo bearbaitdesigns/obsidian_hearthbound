@@ -1,0 +1,89 @@
+name: Release
+
+# Three ways to publish a release that BRAT (and Obsidian) can install:
+#   1. Actions tab → "Release" → Run workflow → pick patch / minor / major (or type 1.2.3).
+#      The version is bumped in manifest.json + versions.json, committed, tagged and released.
+#   2. Change "version" in manifest.json and push to main → released automatically if that tag doesn't exist yet.
+#   3. Push a tag like 1.2.3 yourself (it must match manifest.json).
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump: patch, minor, major — or an exact version like 1.2.3"
+        required: true
+        default: patch
+  push:
+    branches: [main]
+    paths: [manifest.json]
+    tags: ["*.*.*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Work out the version
+        id: ver
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION=$(python3 .github/scripts/bump.py "${{ inputs.bump }}")
+          else
+            VERSION=$(python3 -c "import json;print(json.load(open('manifest.json'))['version'])")
+          fi
+          if [ "${{ github.ref_type }}" = "tag" ] && [ "${{ github.ref_name }}" != "$VERSION" ]; then
+            echo "::error::Tag ${{ github.ref_name }} does not match manifest.json version $VERSION"; exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if gh release view "$VERSION" >/dev/null 2>&1; then echo "exists=true" >> "$GITHUB_OUTPUT"; else echo "exists=false" >> "$GITHUB_OUTPUT"; fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Build main.js + styles.css
+        run: |
+          python3 src/build.py
+          node --check main.js
+
+      - name: Commit version bump and tag
+        if: github.ref_type != 'tag' && steps.ver.outputs.exists == 'false'
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.json versions.json main.js styles.css
+          if ! git diff --cached --quiet; then git commit -m "Release $VERSION"; git push origin HEAD:main; fi
+          if ! git rev-parse "$VERSION" >/dev/null 2>&1; then git tag "$VERSION"; git push origin "$VERSION"; fi
+
+      - name: Publish GitHub release
+        if: steps.ver.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          gh release create "$VERSION" main.js manifest.json styles.css \
+            --title "Hearthbound Codex $VERSION" --generate-notes --verify-tag
+
+      - name: Release already exists — refresh its files
+        if: steps.ver.outputs.exists == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ steps.ver.outputs.version }}" main.js manifest.json styles.css --clobber

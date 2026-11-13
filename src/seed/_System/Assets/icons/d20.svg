@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b9a2ff"/><stop offset="1" stop-color="#4b2aa8"/></linearGradient></defs>
+<polygon points="50,4 90,27 90,73 50,96 10,73 10,27" fill="url(#g)" stroke="#f8deb0" stroke-width="2.5"/>
+<polygon points="50,22 76,64 24,64" fill="#2a1766" fill-opacity=".55" stroke="#f8deb0" stroke-width="1.6"/>
+<path d="M50 4L50 22M10 27L50 22L90 27M10 27L24 64M90 27L76 64M10 73L24 64M90 73L76 64M24 64L50 96L76 64" stroke="#f8deb0" stroke-width="1.4" fill="none" stroke-opacity=".8"/>
+<text x="50" y="57" text-anchor="middle" font-family="Fraunces,Georgia,serif" font-weight="700" font-size="17" fill="#fff">20</text></svg>

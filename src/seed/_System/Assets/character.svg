@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400">
+<defs><radialGradient id="bg" cx=".5" cy=".62" r=".7"><stop offset="0" stop-color="#5a3518"/><stop offset=".55" stop-color="#22170f"/><stop offset="1" stop-color="#0c0907"/></radialGradient>
+<radialGradient id="lamp" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffe7b0"/><stop offset=".35" stop-color="#ffc46a" stop-opacity=".8"/><stop offset="1" stop-color="#f0a14b" stop-opacity="0"/></radialGradient>
+<linearGradient id="cloak" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a3424"/><stop offset="1" stop-color="#1e140e"/></linearGradient></defs>
+<rect width="300" height="400" fill="url(#bg)"/>
+<g fill="#f8deb0" opacity=".5"><circle cx="40" cy="50" r="1.4"/><circle cx="250" cy="40" r="1.2"/><circle cx="210" cy="90" r="1"/><circle cx="70" cy="120" r="1"/></g>
+<path d="M150 70 C108 70 92 112 96 150 C70 190 56 280 46 400 H254 C244 280 230 190 204 150 C208 112 192 70 150 70Z" fill="url(#cloak)" stroke="#e6a85c" stroke-opacity=".35"/>
+<path d="M150 92 C122 92 114 124 118 150 C126 176 174 176 182 150 C186 124 178 92 150 92Z" fill="#120c08"/>
+<circle cx="138" cy="140" r="3" fill="#ffd88a" opacity=".85"/><circle cx="162" cy="140" r="3" fill="#ffd88a" opacity=".85"/>
+<path d="M150 180 V400" stroke="#e6a85c" stroke-opacity=".18"/>
+<path d="M96 300 q30 -10 54 0 q24 10 54 0" fill="none" stroke="#a3d48c" stroke-opacity=".35" stroke-width="2"/>
+<circle cx="214" cy="262" r="60" fill="url(#lamp)"/>
+<path d="M214 214 V230" stroke="#6b4a2a" stroke-width="3"/><path d="M204 230 h20 l-3 8 h-14z" fill="#6b4a2a"/>
+<rect x="203" y="238" width="22" height="30" rx="5" fill="#ffd88a" stroke="#e6a85c" stroke-width="2"/><path d="M214 238 v30" stroke="#e6a85c" stroke-opacity=".6"/>
+<path d="M205 268 h18 l-3 6 h-12z" fill="#6b4a2a"/>
+<text x="150" y="380" text-anchor="middle" font-family="Fraunces,Georgia,serif" font-size="13" fill="#a8957c" letter-spacing="2">click to add your character</text>
+</svg>
