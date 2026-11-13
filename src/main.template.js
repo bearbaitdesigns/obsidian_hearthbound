@@ -409,6 +409,13 @@ module.exports = class HearthboundCodexPlugin extends Plugin {
     const saved = (await this.loadData()) || {};
     this.settings = Object.assign({}, DEFAULT_SETTINGS, saved.settings || {});
     this.data = { files: saved.files || JSON.parse(JSON.stringify(SEED_FILES)) };
+    // 1.1.0: the starter "Adventurer" job becomes automatic (strongest stat + level)
+    const prof = "00 Command Center/Player Profile.md";
+    if (!this.settings.migratedJob && this.data.files[prof]) {
+      this.data.files[prof] = this.data.files[prof].replace(/^job_class: Adventurer$/m, "job_class:");
+      this.settings.migratedJob = true;
+      if (saved.files) this.saveData({ settings: this.settings, files: this.data.files });
+    }
     this.store = new CodexStore(this);
     this.codexApp = makeCodexApp(this);
     this.views = new Set(); this.blocks = new Set();

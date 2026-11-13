@@ -25,7 +25,8 @@ def read(p):
 def seed():
     files, assets = {}, {}
     base = os.path.join(SRC, "seed")
-    for d, _, names in os.walk(base):
+    for d, dirs, names in os.walk(base):
+        dirs.sort()  # same order on every machine
         for n in sorted(names):
             p = os.path.join(d, n)
             rel = os.path.relpath(p, base).replace(os.sep, "/")
@@ -45,8 +46,8 @@ def main():
     for marker in ("/*__SEED_FILES__*/{}", "/*__SEED_ASSETS__*/{}", '/*__GUIDE__*/""', "/*__ENGINE__*/"):
         if marker not in tpl:
             sys.exit(f"build: marker {marker} missing from main.template.js")
-    out = (tpl.replace("/*__SEED_FILES__*/{}", json.dumps(files, ensure_ascii=False))
-              .replace("/*__SEED_ASSETS__*/{}", json.dumps(assets, ensure_ascii=False))
+    out = (tpl.replace("/*__SEED_FILES__*/{}", json.dumps(files, ensure_ascii=False, sort_keys=True))
+              .replace("/*__SEED_ASSETS__*/{}", json.dumps(assets, ensure_ascii=False, sort_keys=True))
               .replace('/*__GUIDE__*/""', json.dumps(read(os.path.join(SRC, "guide.md")), ensure_ascii=False))
               .replace("/*__ENGINE__*/", read(os.path.join(SRC, "engine.js"))))
     with open(os.path.join(ROOT, "main.js"), "w", encoding="utf-8") as f:

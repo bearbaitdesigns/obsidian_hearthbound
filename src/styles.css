@@ -111,7 +111,7 @@ img.sl-ico { width: 1.15em; height: 1.15em; object-fit: contain; vertical-align:
 .sl-rank > b { display: block; }
 .sl-rank-e { border-color: #7d7d7d; } .sl-rank-d { border-color: var(--sl-good); color: var(--sl-good); }
 .sl-rank-c { border-color: var(--sl-blue); color: var(--sl-blue); } .sl-rank-b { border-color: var(--sl-purple); color: #c7a8f0; }
-.sl-rank-a { border-color: #d9730d; color: #e8954a; } .sl-rank-s, .sl-rank-n { border-color: var(--sl-gold); color: var(--sl-gold); }
+.sl-rank-a { border-color: #d9730d; color: #e8954a; } .sl-rank-s, .sl-rank-n, .sl-rank-legend { border-color: var(--sl-gold); color: var(--sl-gold); }
 .sl-rank.big { width: 36px; height: 36px; font-size: 1.1em; }
 .sl-rank.huge { width: 64px; height: 64px; font-size: 1.9em; border-width: 2px; border-radius: 8px; }
 

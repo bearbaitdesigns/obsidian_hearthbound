@@ -28,8 +28,9 @@ const FOLDERS = {
 
 // (styles come from the plugin's styles.css)
 const RANK_XP = { E: 50, D: 100, C: 200, B: 400, A: 800, S: 1500 };
-const TITLES = [[1, "Unawakened"], [5, "Awakened One"], [10, "Gate Breaker"], [20, "Dungeon Diver"],
-  [35, "Raid Leader"], [50, "Guild Master"], [70, "Monarch-Class"], [100, "Sovereign of Habits"]];
+// Titles earned as you level (a title typed in the Player Profile overrides these)
+const TITLES = [[1, "Hearthling"], [5, "Kindled Wanderer"], [10, "Lantern Bearer"], [20, "Trailwarden"],
+  [35, "Keeper of the Hearth"], [50, "Hearthbound Knight"], [70, "Elder of the Glen"], [100, "Legend of the Hearth"]];
 
 /* ---------------------------------------------------------------- helpers */
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -116,14 +117,14 @@ const profile = ALL.where(p => p.type === "profile").first() || {};
 const CFG = {
   base: num(profile.level_base_xp, 100), step: num(profile.level_step_xp, 50),
   dqBonus: num(profile.daily_quest_bonus, 25),
-  name: profile.player_name || "Player", job: profile.job_class || "Adventurer",
+  name: profile.player_name || "Player", job: profile.job_class || null,
   title: profile.title || null, avatar: profile.character || profile.avatar || null,
   profilePath: profile.file ? profile.file.path : null,
 };
 
 const areas = ALL.where(p => p.type === "area").array().map(p => ({
   name: p.file.name, key: norm(p.file.name), path: p.file.path,
-  stat: p.stat || "—", icon: p.icon || "", cover: p.cover, desc: p.description || "", notes: p.notes || "",
+  stat: p.stat || "—", cls: p.class || "", icon: p.icon || "", cover: p.cover, desc: p.description || "", notes: p.notes || "",
 }));
 const habits = ALL.where(p => p.type === "habit").array().map(p => ({
   name: p.file.name, key: norm(p.file.name), path: p.file.path,
@@ -248,8 +249,18 @@ function levelInfo(xp) {
   while (rem >= need) { rem -= need; lvl++; need = CFG.base + (lvl - 1) * CFG.step; }
   return { lvl, into: rem, need, pct: pctOf(rem, need) };
 }
-const hunterRank = l => l >= 100 ? "N" : l >= 70 ? "S" : l >= 50 ? "A" : l >= 35 ? "B" : l >= 20 ? "C" : l >= 10 ? "D" : "E";
+const hunterRank = l => l >= 100 ? "Legend" : l >= 70 ? "S" : l >= 50 ? "A" : l >= 35 ? "B" : l >= 20 ? "C" : l >= 10 ? "D" : "E";
 const autoTitle = l => TITLES.filter(t => l >= t[0]).pop()[1];
+// Job grows with you: class from your strongest stat (life area), rank word from your level.
+// A job typed in the Player Profile overrides it; each life area's class can be renamed in its editor.
+const STAT_CLASS = { STR: "Knight", VIT: "Herbalist", AGI: "Ranger", INT: "Scholar", WIS: "Druid" };
+const jobRankWord = l => l >= 70 ? "Grand" : l >= 35 ? "Master" : l >= 10 ? "Journeyman" : "Apprentice";
+function autoJob(l) {
+  let best = null, bestXP = 0;
+  for (const a of areas) { const x = areaXP[a.key] || 0; if (x > bestXP) { best = a; bestXP = x; } }
+  const cls = best ? (best.cls || STAT_CLASS[String(best.stat).toUpperCase()] || "Adventurer") : "Adventurer";
+  return `${jobRankWord(l)} ${cls}`;
+}
 const LV = levelInfo(totalXP);
 
 /* ------------------------------------------------------------- rendering */
@@ -294,7 +305,7 @@ const rankBadge = (r, big = "") => {
   if (o && isImg(o) && imgSrc(o)) return `<span class="sl-rankimg ${big}"><img src="${esc(imgSrc(o))}" alt="${esc(r)}"></span>`;
   if (o && !isImg(o)) return `<span class="sl-rank sl-rank-${esc(String(r).toLowerCase())} ${big}"><b>${esc(o)}</b></span>`;
   if (UI_OVR[k]) return `<span class="sl-rankimg ${big}"><img src="${esc(UI_OVR[k])}" alt="${esc(r)}"></span>`;
-  return `<span class="sl-rank sl-rank-${esc(String(r).toLowerCase())} ${big}"><b>${esc(r)}</b></span>`;
+  return `<span class="sl-rank sl-rank-${esc(String(r).toLowerCase())} ${big}" title="Rank ${esc(r)}"><b>${esc(r === "Legend" ? "★" : r)}</b></span>`;
 };
 // Window titles in the "Status-Window" style: Title-Case words joined by hyphens.
 const KEEP_CAPS = new Set(["XP", "HP", "EXP"]);
@@ -551,12 +562,12 @@ function bindIconEdits(el) {
 const EDIT_FIELDS = {
   habit: [["xp", "number", "XP"], ["area", "area", "Life area"], ["daily_quest", "bool", "Part of the Daily Quest ★"], ["cue", "text", "Definition of done"]],
   reward: [["cost", "number", "Cost (XP)"], ["repeatable", "bool", "Can be claimed again"], ["min_level", "number", "Unlocks at level"]],
-  area: [["stat", "text", "Stat (e.g. STR, WIS)"], ["description", "text", "Description"]],
+  area: [["stat", "text", "Stat (e.g. STR, WIS)"], ["class", "text", "Class when this is your strongest stat (e.g. Ranger)"], ["description", "text", "Description"]],
   goal: [["rank", "select:E,D,C,B,A,S", "Rank"], ["xp_reward", "number", "XP for clearing the quest"], ["area", "area", "Life area"], ["deadline", "date", "Deadline"], ["victory", "text", "Victory condition"]],
   sidequest: [["xp", "number", "XP reward"], ["due", "date", "Due date"], ["area", "area", "Life area"]],
   "vision-board": [["horizon", "text", "Horizon (e.g. 2027)"], ["__body", "body", "Content (vision text — images are added on the Prophecy tab)"]],
   "future-self": [["horizon", "text", "Horizon (e.g. 5 years)"], ["__body", "body", "Write-up"]],
-  profile: [["player_name", "text", "Player name"], ["job_class", "text", "Class"], ["title", "text", "Title (empty = earned automatically)"],
+  profile: [["player_name", "text", "Player name"], ["job_class", "text", "Job (empty = earned automatically)"], ["title", "text", "Title (empty = earned automatically)"],
     ["banner", "image", "Banner image"], ["banner_title", "text", "Banner title"], ["banner_subtitle", "text", "Banner subtitle"],
     ["level_base_xp", "number", "XP for level 2"], ["level_step_xp", "number", "Extra XP per further level"], ["daily_quest_bonus", "number", "Daily Quest bonus XP"],
     ["hp_max", "number", "Max HP"], ["hp_regen", "number", "HP regenerated per day"], ["hp_heal_per_habit", "number", "HP healed per good habit"]],
@@ -829,7 +840,7 @@ function renderStatus() {
       <div class="sl-greet">${greet}, <b>${esc(CFG.name)}</b></div>
       <div class="sl-lvlrow"><div class="sl-lvl"><span class="sl-lvlnum">${LV.lvl}</span><span class="sl-lvllab">LEVEL</span></div>
         <div class="sl-idgrid">
-          <div><span>JOB</span><b>${esc(CFG.job)}</b></div>
+          <div><span>JOB</span><b>${esc(CFG.job || autoJob(LV.lvl))}</b></div>
           <div><span>TITLE</span><b>${esc(CFG.title || autoTitle(LV.lvl))}</b></div>
           <div><span>RANK</span>${rankBadge(rank)}</div>
           <div><span>DATE</span><b>${M().format("MMM D, YYYY")}</b></div>
@@ -886,7 +897,7 @@ function renderCharacter() {
     <div class="sl-charinfo">
       <div class="sl-charname">${esc(CFG.name)}</div>
       <div class="sl-chartitle">${esc(CFG.title || autoTitle(LV.lvl))}</div>
-      <div class="sl-charline">Level <b>${LV.lvl}</b> ${esc(CFG.job)} ${rankBadge(rank)}</div>
+      <div class="sl-charline">Level <b>${LV.lvl}</b> ${esc(CFG.job || autoJob(LV.lvl))} ${rankBadge(rank)}</div>
       <div class="sl-meter"><span>HP</span>${bar(pctOf(HP, HPC.max), "hp")}<em>${Math.round(HP)} / ${HPC.max}</em></div>
       <div class="sl-meter"><span>EXP</span>${bar(LV.pct, "xp")}<em>${fmt(LV.into)} / ${fmt(LV.need)}</em></div>
       <div class="sl-cstats">${stats}</div>

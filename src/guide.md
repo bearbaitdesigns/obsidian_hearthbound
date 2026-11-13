@@ -32,6 +32,32 @@ Everything you track is stored inside the plugin itself. **No notes and no daily
 - **Stats:** each life area grants a stat (VIT, STR, AGI, INT, WIS…) = 10 + 1 per 100 XP earned in it.
 - **Removing:** habits and rewards are *retired* (their history stays); quests are *abandoned*. Restore them from the Habits, Rewards or Quests tab.
 
+## Titles, ranks & jobs
+Your **title** and **rank** are earned as you level:
+
+| Level | Rank | Title |
+|---|---|---|
+| 1–4 | E | Hearthling |
+| 5–9 | E | Kindled Wanderer |
+| 10–19 | D | Lantern Bearer |
+| 20–34 | C | Trailwarden |
+| 35–49 | B | Keeper of the Hearth |
+| 50–69 | A | Hearthbound Knight |
+| 70–99 | S | Elder of the Glen |
+| 100+ | Legend ★ | Legend of the Hearth |
+
+Your **job** grows with you: the class comes from your strongest stat, and the rank word from your level.
+
+| Strongest stat | Class | | Level | Rank word |
+|---|---|---|---|---|
+| STR (Fitness) | Knight | | 1–9 | Apprentice |
+| VIT (Health) | Herbalist | | 10–34 | Journeyman |
+| AGI (Work) | Ranger | | 35–69 | Master |
+| INT (Self Development) | Scholar | | 70+ | Grand |
+| WIS (Hobbies) | Druid | | | |
+
+e.g. *Journeyman Ranger*. Rename a class in a life area's ✎ editor. Type your own job or title in **✎ Edit profile & settings** to override them. There is no maximum level.
+
 ## Quest milestones
 Each milestone is measurable: a target, a unit, an XP value and a due date. Add them from the Quests tab or the Overview. Each milestone row has its own **✎** to change its description, target, unit, XP or due date.
 
