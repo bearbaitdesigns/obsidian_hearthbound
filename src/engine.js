@@ -134,6 +134,7 @@ const habits = ALL.where(p => p.type === "habit").array().map(p => ({
   history: toArr(p.history).map(dstr).filter(Boolean),
 })).sort((a, b) => (b.dq - a.dq) || (b.xp - a.xp) || a.name.localeCompare(b.name));
 const H = Object.fromEntries(habits.map(h => [h.key, h]));
+const FOCUS = new Set(toArr(profile.focus).map(norm));   // life areas the player most wants to improve
 // Side quests. `repeat` makes one come back after it's completed:
 //   1d, 3d, 7d, 14d … (every N days) · 1m (monthly) · mon … sun (every that weekday)
 // A repeating side quest keeps every completion date in `completions` and hides until `next`.
@@ -345,7 +346,7 @@ function toast(msg, kind = "") {
   setTimeout(() => t.classList.add("out"), 2600);
   setTimeout(() => t.remove(), 3200);
 }
-const lnk = (path, text, cls = "") => `<a class="sl-link ${cls}" data-open="${esc(path)}" href="#">${esc(text)}</a>`;
+const lnk = (path, text, cls = "") => `<span class="sl-name ${cls}">${esc(text)}</span>`;   // names are plain text; edit through ✎
 const bar = (pct, cls = "") => `<div class="sl-bar ${cls}"><div class="sl-fill" style="width:${Math.max(0, Math.min(100, pct)).toFixed(1)}%"></div></div>`;
 const rankBadge = (r, big = "") => {
   const k = "rank-" + String(r).toLowerCase();
@@ -496,6 +497,11 @@ async function restoreEntity(kind, path) {
 }
 // two-click confirm buttons: <button class="sl-x" data-rm="kind" data-p="path">
 const edBtn = path => `<button class="sl-ed" data-edit="${esc(path)}" title="Edit">✎</button>`;
+const areaTag = name => {
+  if (!name) return "";
+  const a = areas.find(x => x.key === norm(name));
+  return a && a.stat && a.stat !== "—" ? `${esc(a.stat)}🔹${esc(a.name)}` : esc(name);
+};
 const noteLine = n => n ? `<div class="sl-note">${esc(n)}</div>` : "";
 const rmBtn = (kind, path, label = "✕", title = "Remove") => `<button class="sl-x" data-rm="${kind}" data-p="${esc(path)}" title="${esc(title)}">${label}</button>`;
 function bindRemove(el) {
@@ -618,7 +624,7 @@ const EDIT_FIELDS = {
   profile: [["player_name", "text", "Player name"], ["job_class", "text", "Job (empty = earned automatically)"], ["title", "text", "Title (empty = earned automatically)"],
     ["banner", "image", "Banner image"], ["banner_title", "text", "Banner title"], ["banner_subtitle", "text", "Banner subtitle"],
     ["level_base_xp", "number", "XP for level 2"], ["level_step_xp", "number", "Extra XP per further level"], ["daily_quest_bonus", "number", "Daily Quest bonus XP"],
-    ["hp_max", "number", "Max HP"], ["hp_regen", "number", "HP regenerated per day"], ["hp_heal_per_habit", "number", "HP healed per good habit"]],
+    ["focus", "focus", "Stats you most want to improve (up to 3)"], ["hp_max", "number", "Max HP"], ["hp_regen", "number", "HP regenerated per day"], ["hp_heal_per_habit", "number", "HP healed per good habit"]],
 };
 EDIT_FIELDS.quest = EDIT_FIELDS.goal; EDIT_FIELDS.vision = EDIT_FIELDS["vision-board"];
 function popup(title, bodyHtml) {
@@ -639,6 +645,50 @@ async function uploadTo(folder, file, prefix) {
   await app.vault.createBinary(path, await file.arrayBuffer());
   return path;
 }
+// ---- focus-stat picker (used by character creation and the profile editor)
+function focusPicker(selected) {
+  return `<div class="sl-focus" data-k="focus">${areas.map(a => `<label class="sl-focusopt ${selected.includes(a.key) ? "on" : ""}"><input type="checkbox" value="${esc(a.name)}" ${selected.includes(a.key) ? "checked" : ""}>
+    <span class="sl-focusico">${a.icon ? ico(a.icon) : UI("spark")}</span><b>${esc(a.stat)}</b><span>${esc(a.name)}</span></label>`).join("")}</div>`;
+}
+function readFocus(box) { return Array.from(box.querySelectorAll("input:checked")).map(i => `[[${i.value}]]`); }
+function bindFocus(scope) {
+  scope.querySelectorAll(".sl-focus").forEach(box => box.addEventListener("change", ev => {
+    const boxes = Array.from(box.querySelectorAll("input")), on = boxes.filter(b => b.checked);
+    if (on.length > 3) { ev.target.checked = false; toast("Pick up to 3 focus stats", "bad"); }
+    boxes.forEach(b => b.closest(".sl-focusopt").classList.toggle("on", b.checked));
+  }));
+}
+// ---- character creation: shown once, the first time the Codex opens
+function renderCreator() {
+  if (!CFG.profilePath || profile.setup_done === true || window.__slCreatorShown) return;
+  window.__slCreatorShown = true;
+  const p = popup("Create your character", `
+    <div class="sl-meta" style="margin-bottom:10px">Welcome to the Hearthbound Codex. Tell the Codex who you are — you can change all of this later in Profile → ✎ Edit profile &amp; settings.</div>
+    <label class="sl-edrow"><span>Name</span><input class="sl-addin" data-c="name" value="${esc(profile.player_name && profile.player_name !== "Player" ? profile.player_name : "")}" placeholder="Your adventurer's name"></label>
+    <label class="sl-edrow"><span>Job</span><input class="sl-addin" data-c="job" value="${esc(profile.job_class || "")}" placeholder="Leave empty to earn one as you level"></label>
+    <div class="sl-edrow"><span>Portrait</span><div class="sl-edinline"><span class="sl-edcover" data-c="prev">${imgSrc(CFG.avatar) ? `<img src="${esc(imgSrc(CFG.avatar))}">` : `<span class="sl-defico">—</span>`}</span><button class="sl-btn xs" data-c="up">Upload…</button><input type="file" accept="image/*" hidden data-c="file"></div></div>
+    <div class="sl-chtitle">Which stats do you most want to improve? (pick up to 3)</div>
+    ${focusPicker(toArr(profile.focus).map(norm))}
+    <div class="sl-actions"><button class="sl-btn" data-c="go">Begin the adventure</button><span style="flex:1"></span><button class="sl-btn xs ghost" data-c="skip">Skip for now</button></div>`);
+  const el = p.el, q = k => el.querySelector(`[data-c="${k}"]`);
+  bindFocus(el);
+  let portraitFile = null;
+  q("up").addEventListener("click", () => q("file").click());
+  q("file").addEventListener("change", () => {
+    portraitFile = q("file").files && q("file").files[0];
+    if (portraitFile) q("prev").innerHTML = `<img src="${URL.createObjectURL(portraitFile)}">`;
+  });
+  q("skip").addEventListener("click", p.close);
+  q("go").addEventListener("click", async () => {
+    try {
+      const name = q("name").value.trim(), job = q("job").value.trim(), focus = readFocus(el.querySelector(".sl-focus"));
+      if (portraitFile) await savePortrait(portraitFile);
+      await setFM(CFG.profilePath, fm => { if (name) fm.player_name = name; fm.job_class = job || null; fm.focus = focus; fm.setup_done = true; });
+      p.close();
+      toast(`Welcome, ${name || "adventurer"}! Your adventure begins.`, "gold");
+    } catch (e) { toast("⚠ " + e.message, "bad"); }
+  });
+}
 const defaultIconFor = pg => UI(pg.type === "habit" ? (String(pg.polarity) === "bad" ? "skull" : "spark") : pg.type === "reward" ? "gift" : pg.type === "goal" || pg.type === "quest" ? "sword" : pg.type === "sidequest" ? "check" : "spark");
 async function openEditor(path) {
   let pg = ALL.where(p => p.file.path === path).first();
@@ -657,6 +707,7 @@ async function openEditor(path) {
     else if (kind === "number") ctl = `<input class="sl-addin" type="number" step="any" data-k="${k}" value="${esc(val(v))}">`;
     else if (kind === "date") ctl = `<input class="sl-addin date" type="date" data-k="${k}" value="${esc(dstr(v) || "")}">`;
     else if (kind === "area") ctl = `<select class="sl-addin" data-k="${k}"><option value="">—</option>${areas.map(a => `<option ${norm(v) === a.key ? "selected" : ""}>${esc(a.name)}</option>`).join("")}</select>`;
+    else if (kind === "focus") ctl = focusPicker(toArr(v).map(norm));
     else if (kind === "repeat") ctl = `<div class="sl-edinline">${repeatSelect(v, `data-k="${k}"`)}</div>`;
     else if (kind === "body") ctl = `<textarea class="sl-addin sl-edbody" rows="10" data-k="${k}">${esc(bodyText)}</textarea>`;
     else if (kind === "image") { state.images[k] = v ? val(v) : null; ctl = `<div class="sl-edinline"><span class="sl-edcover" data-imgprev="${k}">${v && imgSrc(v) ? `<img src="${esc(imgSrc(v))}">` : `<span class="sl-defico">—</span>`}</span><button class="sl-btn xs" data-imgup="${k}">Upload…</button><button class="sl-btn xs ghost" data-imgrm="${k}">Remove</button><input type="file" accept="image/*" hidden data-imgfile="${k}"></div>`; }
@@ -683,7 +734,7 @@ async function openEditor(path) {
     <label class="sl-edrow top"><span>Notes</span><textarea class="sl-addin" rows="4" data-notes="1" placeholder="Anything you want to remember…">${esc(pg.notes || "")}</textarea></label>`}
     <div class="sl-actions"><button class="sl-btn" data-save="1">Save</button><button class="sl-btn ghost" data-cancel="1">Cancel</button>${isProfile ? "" : `<span style="flex:1"></span>${retireCtl}<button class="sl-btn xs red" data-delcard="1">Delete…</button>`}</div>`);
   const el = p.el;
-  bindRepeat(el);
+  bindRepeat(el); bindFocus(el);
   const retBtn = el.querySelector("[data-retirecard]");
   if (retBtn) retBtn.addEventListener("click", async () => {
     if (!retBtn.classList.contains("armed")) { retBtn.classList.add("armed"); retBtn.textContent = retBtn.dataset.retirecard === "quest" ? "Click again to abandon" : "Click again to retire"; return; }
@@ -731,6 +782,7 @@ async function openEditor(path) {
         const k = i.dataset.k, kind = (fields.find(f => f[0] === k) || [])[1];
         if (kind === "body" || kind === "image" || i.tagName === "INPUT" && i.type === "file") return;
         if (kind === "repeat") { values[k] = readRepeat(i.parentNode) || null; return; }
+        if (kind === "focus") { values[k] = readFocus(i); return; }
         if (kind === "bool") values[k] = i.checked;
         else if (kind === "number") values[k] = i.value === "" ? null : +i.value;
         else if (kind === "area") values[k] = i.value ? `[[${i.value}]]` : null;
@@ -861,7 +913,7 @@ function renderSideQuests() {
     return `<div class="sl-ms sl-sq ${state === "done" ? "done" : ""} ${state === "rest" ? "resting" : ""} ${overdue ? "overdue" : ""}">
       <button class="sl-check" data-sq="${esc(q.path)}" title="${state === "done" ? "Mark not done" : "Complete"}" ${state === "rest" ? "disabled" : ""}>${state === "done" ? UI("check") : ""}</button>
       <div class="sl-mstext"><div>${lnk(q.path, q.name)}${q.repeat ? ` <span class="sl-rep" title="Repeats">↻ ${esc(repeatLabel(q.repeat))}</span>` : ""}</div>${noteLine(q.notes)}</div>
-      <span class="sl-due">${esc(due)}</span><span class="sl-msxp">+${q.xp}</span><span class="sl-ctrls">${edBtn(q.path)}${rmBtn("trash", q.path, "✕", "Delete side quest")}</span></div>`;
+      <span class="sl-due">${esc(due)}</span><span class="sl-msxp">+${q.xp}</span><span class="sl-ctrls">${rmBtn("trash", q.path, "✕", "Delete side quest")}${edBtn(q.path)}</span></div>`;
   };
   const avail = open.reduce((a, q) => a + q.xp, 0);
   const el = mount(win("SIDE QUESTS", `
@@ -939,7 +991,7 @@ function renderStatus() {
   const av = imgSrc(CFG.avatar);
   const stats = areas.map(a => {
     const x = areaXP[a.key] || 0;
-    return `<div class="sl-stat"><span class="sl-stat-k">${ico(a.icon, "", "sm")} ${esc(a.stat)}</span><span class="sl-stat-v">${10 + Math.floor(Math.max(0, x) / 100)}</span><span class="sl-stat-n">${esc(a.name)}</span></div>`;
+    return `<div class="sl-stat ${FOCUS.has(a.key) ? "focus" : ""}" ${FOCUS.has(a.key) ? 'title="Focus stat"' : ""}><span class="sl-stat-k">${ico(a.icon, "", "sm")} ${esc(a.stat)}</span><span class="sl-stat-v">${10 + Math.floor(Math.max(0, x) / 100)}</span><span class="sl-stat-n">${esc(a.name)}</span></div>`;
   }).join("");
   const body = `
   <div class="sl-status">
@@ -999,7 +1051,7 @@ function renderBanner() {
 
 function renderCharacter() {
   const rank = hunterRank(LV.lvl);
-  const stats = areas.map(a => { const x = Math.max(0, areaXP[a.key] || 0); return `<div class="sl-csrow"><span>${ico(a.icon, "", "sm")} ${esc(a.stat)}</span><em>${esc(a.name)}</em><b>${10 + Math.floor(x / 100)}</b></div>`; }).join("");
+  const stats = areas.map(a => { const x = Math.max(0, areaXP[a.key] || 0); return `<div class="sl-csrow ${FOCUS.has(a.key) ? "focus" : ""}"><span>${ico(a.icon, "", "sm")} ${esc(a.stat)}</span><em>${esc(a.name)}${FOCUS.has(a.key) ? " ★ focus" : ""}</em><b>${10 + Math.floor(x / 100)}</b></div>`; }).join("");
   mount(win("CHARACTER", `<div class="sl-charsheet">
     ${portrait("sl-bigportrait", imgSrc(CFG.avatar), rank)}
     <div class="sl-charinfo">
@@ -1012,6 +1064,119 @@ function renderCharacter() {
       <div class="sl-meta">Click the portrait to upload your own character art.</div>
       ${CFG.profilePath ? `<button class="sl-btn sm" data-edit="${esc(CFG.profilePath)}">✎ Edit profile &amp; settings</button>` : ""}
     </div></div>`, "sl-charwin"));
+}
+
+// Profile: find the weakest stat and suggest how to raise it
+const STAT_TIPS = {
+  STR: ["Add a short daily strength habit — even 10 push-ups or a 15-minute walk counts.", "Book three workouts into this week as side quests.", "Start a quest with measurable milestones, e.g. “Run 5 km” or “20 push-ups in a row”."],
+  VIT: ["Make sleep a habit: a fixed bedtime and 7+ hours.", "Add an easy health habit: a glass of water with every meal, or one home-cooked meal a day.", "Take a 10-minute walk outside after lunch."],
+  AGI: ["Protect one deep-work block a day (phone in another room).", "Plan tomorrow's top three tasks before you stop working.", "Turn a lingering work task into a side quest with a due date."],
+  INT: ["Read 10–20 pages a day as a habit.", "Pick one course or skill and make a quest with weekly lessons as milestones.", "Journal three lines each evening: a win, a lesson, a plan."],
+  WIS: ["Schedule hobby time like an appointment — a weekly repeating side quest works well.", "Start a small creative quest, e.g. “Finish a 1,000-piece puzzle” or “Knit a scarf”.", "Try something new each week: a game night, a craft or a puzzle."],
+};
+function renderAdvice() {
+  if (!areas.length) return;
+  const since = M().subtract(30, "days").format("YYYY-MM-DD");
+  const recentXP = {};
+  for (const e of events) if (e.area && e.date && e.date > since) recentXP[norm(e.area)] = (recentXP[norm(e.area)] || 0) + e.xp;
+  const ranked = areas.map(a => ({ a, x: Math.max(0, areaXP[a.key] || 0), r: recentXP[a.key] || 0 }))
+    .map(o => Object.assign(o, { v: 10 + Math.floor(o.x / 100) }))
+    .sort((p, q) => p.v - q.v || p.r - q.r || p.x - q.x);
+  const focusRanked = ranked.filter(o => FOCUS.has(o.a.key));
+  const weak = focusRanked[0] || ranked[0], a = weak.a, overall = ranked[0];
+  const hs = habits.filter(h => h.active && norm(h.area) === a.key);
+  const good = hs.filter(h => h.polarity === "good").map(h => ({ h, st: habitStats(h) })).sort((p, q) => p.st.last30 - q.st.last30);
+  const bad = hs.filter(h => h.polarity === "bad").map(h => ({ h, st: habitStats(h) })).filter(o => o.st.last30 > 0).sort((p, q) => q.st.last30 - p.st.last30);
+  const qs = quests.filter(q => isActive(q) && norm(q.area) === a.key);
+  const sqs = sideQuests.filter(q => q.open && norm(q.area) === a.key);
+  const tips = [];
+  for (const { h, st } of good.slice(0, 2)) tips.push(`Do <b>${esc(h.name)}</b> more often — ${Math.round(pctOf(st.last30, 30))}% of days in the last 30 (+${h.xp} XP each).`);
+  for (const { h, st } of bad.slice(0, 1)) tips.push(`Cut back on <b>${esc(h.name)}</b> — ${st.last30} slip${st.last30 === 1 ? "" : "s"} in the last 30 days, each costing ${h.xp} XP.`);
+  for (const q of qs.slice(0, 2)) { const n = q.ms.find(m => !m.done); if (n) tips.push(`Push quest <b>${esc(q.name)}</b>: next milestone “${esc(n.text)}”${n.target != null ? ` (${fmt(n.cur)}/${fmt(n.target)} ${esc(n.unit)})` : ""}${n.xp ? ` for +${n.xp} XP` : ""}.`); }
+  for (const q of sqs.slice(0, 2)) tips.push(`Clear side quest <b>${esc(q.name)}</b> for +${q.xp} XP.`);
+  if (!good.length) tips.push(`You have no good habits in ${esc(a.name)} yet — add one below and set its life area to ${esc(a.name)}.`);
+  if (!qs.length) tips.push(`Start a quest in ${esc(a.name)} so milestones feed this stat.`);
+  const general = STAT_TIPS[String(a.stat).toUpperCase()] || ["Add a small daily habit in this area.", "Set a quest with measurable milestones for it.", "Add a repeating side quest so it shows up every week."];
+  const bars = ranked.map(o => `<div class="sl-hrow"><span class="hn">${FOCUS.has(o.a.key) ? "★ " : ""}${esc(o.a.stat)}🔹${esc(o.a.name)}</span>${bar(Math.min(100, (o.x % 100)), o === weak ? "hp" : "xp")}<em>${o.v} · ${o.r >= 0 ? "+" : ""}${o.r} XP/30d</em></div>`).join("");
+  const focusNote = focusRanked.length
+    ? `<div class="sl-meta" style="margin-bottom:10px">Your focus: ${focusRanked.map(o => `${esc(o.a.stat)}🔹${esc(o.a.name)}`).join(", ")}. Showing the weakest of them.${overall !== weak ? ` Your weakest stat overall is ${esc(overall.a.stat)}🔹${esc(overall.a.name)} (${overall.v}).` : ""}</div>`
+    : `<div class="sl-meta" style="margin-bottom:10px">Tip: choose focus stats in ✎ Edit profile &amp; settings and this window will help with those first.</div>`;
+  mount(win(focusRanked.length ? "FOCUS STAT TO TRAIN" : "WEAKEST STAT", focusNote + `
+    <div class="sl-weak"><div class="sl-weakstat">${esc(a.stat)}<small>${weak.v}</small></div>
+      <div><div class="sl-card-name">${a.icon ? ico(a.icon) + " " : ""}${esc(a.name)}</div><div class="sl-meta">${fmt(weak.x)} XP all-time · ${weak.r >= 0 ? "+" : ""}${weak.r} XP in the last 30 days</div></div></div>
+    ${tips.length ? `<div class="sl-chtitle">From your Codex</div><ul class="sl-tips">${tips.map(t => `<li>${t}</li>`).join("")}</ul>` : ""}
+    <div class="sl-chtitle">Ideas to raise ${esc(a.stat)}</div><ul class="sl-tips">${general.map(t => `<li>${esc(t)}</li>`).join("")}</ul>
+    <div class="sl-chtitle">All stats, weakest first</div>${bars.replace(/(<span class="hn">)/g, "$1")}
+    <div class="sl-addrow">${addBox("good")}</div>`));
+}
+
+// ---- Random quest generator: rolls a side or main quest, leaning toward focus & weak stats
+const QUEST_IDEAS = {
+  STR: { side: [["Do 50 push-ups today, in any sets", 15], ["Take the stairs all day", 10], ["Stretch for 15 minutes", 10], ["Go for a 30-minute bike ride", 20], ["Try a new workout video", 15], ["Carry the groceries home on foot", 10]],
+    main: [["Run a 5K", "C", [["Run 1 km without stopping", 1, "km"], ["Run 3 km without stopping", 3, "km"], ["Run 5 km", 5, "km"]]], ["20 Push-ups in a Row", "D", [["10 push-ups in a row", 10, "reps"], ["15 push-ups in a row", 15, "reps"], ["20 push-ups in a row", 20, "reps"]]], ["Train 12 Times This Month", "C", [["4 sessions", 4, "sessions"], ["8 sessions", 8, "sessions"], ["12 sessions", 12, "sessions"]]]] },
+  VIT: { side: [["Drink 8 glasses of water today", 10], ["Cook a healthy meal from scratch", 15], ["Be in bed by 22:30 tonight", 15], ["Take a 20-minute walk outside", 10], ["Book a check-up you've been putting off", 20], ["Have a no-sugar day", 15]],
+    main: [["Sleep Reset", "C", [["7 nights of 7+ hours", 7, "nights"], ["14 nights of 7+ hours", 14, "nights"], ["30 nights of 7+ hours", 30, "nights"]]], ["Cook 10 New Healthy Recipes", "D", [["3 recipes", 3, "recipes"], ["6 recipes", 6, "recipes"], ["10 recipes", 10, "recipes"]]]] },
+  AGI: { side: [["Clear your inbox to zero", 15], ["Do one 90-minute deep-work block", 20], ["Plan tomorrow's top three tasks", 10], ["Finish the task you've been avoiding", 25], ["Tidy your desk and files", 10], ["Update your CV or portfolio", 20]],
+    main: [["Ship a Side Project", "B", [["Write the plan", 1, "plan"], ["Build the first version", 50, "%"], ["Finish and share it", 100, "%"]]], ["40 Hours of Deep Work", "C", [["10 hours", 10, "hours"], ["25 hours", 25, "hours"], ["40 hours", 40, "hours"]]]] },
+  INT: { side: [["Read 30 pages", 15], ["Watch a documentary and note 3 things you learned", 15], ["Learn 10 words in a new language", 10], ["Write a one-page summary of a book", 20], ["Do a free online lesson", 15], ["Journal for 15 minutes", 10]],
+    main: [["Read 3 Books", "C", [["Finish book 1", 1, "books"], ["Finish book 2", 2, "books"], ["Finish book 3", 3, "books"]]], ["Learn the Basics of a Language", "B", [["Learn 100 words", 100, "words"], ["Learn 300 words", 300, "words"], ["Hold a 5-minute conversation", 1, "conversation"]]]] },
+  WIS: { side: [["Spend an hour on a hobby, phone away", 15], ["Start a puzzle", 10], ["Host or join a game night", 20], ["Make something with your hands", 15], ["Visit a museum, gallery or library", 15], ["Try a craft you've never done", 20]],
+    main: [["Finish a Creative Project", "C", [["Gather materials", 1, "step"], ["Halfway done", 50, "%"], ["Finished", 100, "%"]]], ["Master a New Board Game", "D", [["Learn the rules", 1, "game"], ["Play 5 games", 5, "games"], ["Win a game", 1, "win"]]]] },
+};
+const GENERIC_IDEAS = { side: [["Do one thing you've been putting off", 20], ["Spend 30 minutes on this life area", 15], ["Help someone today", 15]],
+  main: [["30-Day Challenge", "C", [["10 days", 10, "days"], ["20 days", 20, "days"], ["30 days", 30, "days"]]]] };
+function pickArea() {
+  if (!areas.length) return null;
+  const weakest = areas.map(a => ({ a, x: areaXP[a.key] || 0 })).sort((p, q) => p.x - q.x)[0].a;
+  const pool = [];
+  for (const a of areas) { const w = 1 + (FOCUS.has(a.key) ? 3 : 0) + (a === weakest ? 2 : 0); for (let i = 0; i < w; i++) pool.push(a); }
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+function rollQuest(kind) {
+  const a = pickArea(), ideas = (a && QUEST_IDEAS[String(a.stat).toUpperCase()]) || GENERIC_IDEAS;
+  const list = ideas[kind] || GENERIC_IDEAS[kind];
+  return { area: a, kind, idea: list[Math.floor(Math.random() * list.length)] };
+}
+function renderGenerator() {
+  const st = window.__slRoll || (window.__slRoll = rollQuest("side"));
+  const el = mount(win("QUEST GENERATOR", ""));
+  const body = el.querySelector(".sl-window");
+  const draw = () => {
+    const r = window.__slRoll, a = r.area;
+    const tag = a ? `${esc(a.stat)}🔹${esc(a.name)}${FOCUS.has(a.key) ? " ★" : ""}` : "";
+    const detail = r.kind === "side"
+      ? `<div class="sl-rollname">${esc(r.idea[0])}</div><div class="sl-meta">${tag} · side quest · +${r.idea[1]} XP · due in 2 days</div>`
+      : `<div class="sl-rollname">${rankBadge(r.idea[1])} ${esc(r.idea[0])}</div><div class="sl-meta">${tag} · main quest · +${RANK_XP[r.idea[1]] || 200} XP when cleared</div>
+         <ul class="sl-tips">${r.idea[2].map(m => `<li>${esc(m[0])} <span class="sl-meta">(${m[1]} ${esc(m[2])})</span></li>`).join("")}</ul>`;
+    body.innerHTML = `<div class="sl-wtitle"><span>${esc(tcase("QUEST GENERATOR"))}</span></div>
+      <div class="sl-tabs"><button class="sl-tab ${r.kind === "side" ? "on" : ""}" data-gk="side">Side quest</button><button class="sl-tab ${r.kind === "main" ? "on" : ""}" data-gk="main">Main quest</button></div>
+      <div class="sl-roll"><div class="sl-dice">🎲</div><div>${detail}</div></div>
+      <div class="sl-actions"><button class="sl-btn" data-g="accept">✔ Accept quest</button><button class="sl-btn ghost" data-g="reroll">🎲 Roll again</button></div>`;
+    body.querySelectorAll("[data-gk]").forEach(b => b.addEventListener("click", () => { window.__slRoll = rollQuest(b.dataset.gk); draw(); }));
+    body.querySelector('[data-g="reroll"]').addEventListener("click", () => { window.__slRoll = rollQuest(window.__slRoll.kind); draw(); });
+    body.querySelector('[data-g="accept"]').addEventListener("click", async () => {
+      try {
+        const r2 = window.__slRoll, areaLink = r2.area ? `"[[${r2.area.name}]]"` : "";
+        const safe = r2.idea[0].replace(/[\\/:*?"<>|#^\[\]]/g, "").trim();
+        if (r2.kind === "side") {
+          let path = P(`07 Side Quests/${safe}.md`), n = 2;
+          while (app.vault.getAbstractFileByPath(path)) path = P(`07 Side Quests/${safe} (${n++}).md`);
+          await ensureFolder(P("07 Side Quests"));
+          await app.vault.create(path, `---\ntype: sidequest\nxp: ${r2.idea[1]}\ndue: ${M().add(2, "days").format("YYYY-MM-DD")}\nrepeat:\ndone:\narea: ${areaLink}\ncreated: ${TODAY}\n---\n`);
+        } else {
+          let path = P(`02 Quests/${safe}.md`), n = 2;
+          while (app.vault.getAbstractFileByPath(path)) path = P(`02 Quests/${safe} (${n++}).md`);
+          const ms = r2.idea[2].map((m, i) => `- [ ] ${m[0]} [current:: 0] [target:: ${m[1]}] [unit:: ${m[2]}] [xp:: ${[25, 40, 60][i] || 40}] 📅 ${M().add((i + 1) * 14, "days").format("YYYY-MM-DD")}`).join("\n");
+          await ensureFolder(P("02 Quests"));
+          await app.vault.create(path, `---\ntype: goal\nstatus: active\nrank: ${r2.idea[1]}\narea: ${areaLink}\nxp_reward: ${RANK_XP[r2.idea[1]] || 200}\nstarted: ${TODAY}\ndeadline: ${M().add(r2.idea[2].length * 14, "days").format("YYYY-MM-DD")}\ncompleted:\nvictory: ""\n---\n# ${r2.idea[0]}\n\n## Milestones\n${ms}\n`);
+        }
+        toast(`Quest accepted: ${r2.idea[0]}`, "gold");
+        window.__slRoll = rollQuest(r2.kind);
+      } catch (e) { toast("⚠ " + e.message, "bad"); }
+    });
+  };
+  // the window's inner markup is drawn by draw(); `el` is the section wrapper
+  draw();
 }
 
 function renderTime() {
@@ -1053,7 +1218,7 @@ function habitCards(date, pol) {
   if (!list.length) return { html: empty(pol === "good" ? "No good habits yet — add one in Quick Actions." : "No bad habits tracked. Nice."), list, doneSet };
   const html = `<div class="sl-cards">` + list.map(h => {
     const done = doneSet.has(h.key);
-    const area = h.area ? `<div class="sl-meta">${esc(h.area)}</div>` : "";
+    const area = h.area ? `<div class="sl-meta sl-areatag">${areaTag(h.area)}</div>` : "";
     if (pol === "good") return `
       <div class="sl-card ${done ? "is-done" : ""}">${edBtn(h.path)}
         ${art(h, "spark")}
@@ -1385,7 +1550,7 @@ function questCard(q, removable) {
   const next = q.ms.filter(m => !m.done).sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"))[0];
   const dl = q.deadline ? daysFrom(TODAY, q.deadline) : null;
   return `<div class="sl-quest">
-    <div class="sl-qhead">${rankBadge(q.rank)}<div class="sl-qname">${lnk(q.path, q.name)}${q.example ? ` <span class="sl-tag">example</span>` : ""}<div class="sl-meta">${esc(q.area || "—")} · reward ${fmt(q.xp)} XP${q.deadline ? ` · deadline ${M(q.deadline).format("MMM D, YYYY")} (${dl >= 0 ? dl + "d left" : "overdue"})` : ""}</div></div>
+    <div class="sl-qhead">${rankBadge(q.rank)}<div class="sl-qname">${lnk(q.path, q.name)}${q.example ? ` <span class="sl-tag">example</span>` : ""}<div class="sl-meta">${q.area ? areaTag(q.area) : "—"} · reward ${fmt(q.xp)} XP${q.deadline ? ` · deadline ${M(q.deadline).format("MMM D, YYYY")} (${dl >= 0 ? dl + "d left" : "overdue"})` : ""}</div></div>
     <div class="sl-qpct">${Math.round(q.pct * 100)}%</div>${edBtn(q.path)}</div>
     ${bar(q.pct * 100, "quest")}
     ${claimBtn(q)}${noteLine(q.notes)}<div class="sl-meta">${q.ms.filter(m => m.done).length}/${q.ms.length} milestones${next ? ` · next: <b>${esc(next.text)}</b>${next.due ? " (" + M(next.due).format("MMM D") + ")" : ""}` : ""}</div>
@@ -1409,7 +1574,7 @@ function renderGoal() {
   if (q.status === "completed") footer = `<div class="sl-victory">${UI("trophy")} Enshrined in the Hall of Triumph on ${M(q.completed).format("MMMM D, YYYY")} <button class="sl-btn xs ghost" data-reopen="1">reopen</button></div>`;
   else if (allDone) footer = `<button class="sl-btn wide gold big" data-claim-q="1">${UI("sword")} CLAIM VICTORY — +${fmt(q.xp)} XP</button>`;
   const el = mount(win(`QUEST · ${q.status.toUpperCase()}`, `
-    <div class="sl-qhead">${rankBadge(q.rank, "big")}<div class="sl-qname"><b>${esc(q.name)}</b><div class="sl-meta">${esc(q.area || "No area")} · started ${q.started ? M(q.started).format("MMM D, YYYY") : "—"}${q.deadline ? ` · deadline ${M(q.deadline).format("MMM D, YYYY")} (${dl >= 0 ? dl + " days left" : "overdue"})` : ""}</div>
+    <div class="sl-qhead">${rankBadge(q.rank, "big")}<div class="sl-qname"><b>${esc(q.name)}</b><div class="sl-meta">${q.area ? areaTag(q.area) : "No area"} · started ${q.started ? M(q.started).format("MMM D, YYYY") : "—"}${q.deadline ? ` · deadline ${M(q.deadline).format("MMM D, YYYY")} (${dl >= 0 ? dl + " days left" : "overdue"})` : ""}</div>
     ${q.victory ? `<div class="sl-victorycond">Victory condition: ${esc(q.victory)}</div>` : ""}</div><div class="sl-qpct">${Math.round(q.pct * 100)}%</div></div>
     ${bar(q.pct * 100, "quest big")}
     <div class="sl-chips">${chip("Milestones", `${q.ms.filter(m => m.done).length}/${q.ms.length}`)}${chip("Milestone XP", "+" + msXP, "pos")}${chip("Clear reward", fmt(q.xp) + " XP", "gold")}</div>
@@ -1518,7 +1683,7 @@ function renderHall() {
     return `<div class="sl-trophy r-${q.rank.toLowerCase()}">${edBtn(q.path)}
       <div class="sl-trophy-art">${src ? `<img src="${esc(src)}">` : `<div class="sl-trophy-emblem">${rankBadge(q.rank, "huge")}</div>`}</div>
       <div class="sl-trophy-body"><div class="sl-card-name">${UI("trophy")} ${lnk(q.path, q.name)}${q.example ? ` <span class="sl-tag">example</span>` : ""}</div>
-      <div class="sl-meta">${esc(q.area || "—")} · Rank ${esc(q.rank)}</div>
+      <div class="sl-meta">${q.area ? areaTag(q.area) : "—"} · Rank ${esc(q.rank)}</div>
       <div class="sl-mono">Cleared ${q.completed ? M(q.completed).format("MMM D, YYYY") : "—"}${days != null ? ` · ${days} days` : ""}</div>
       <div class="sl-mono">${q.ms.length} milestones · +${fmt(q.xp + q.ms.reduce((b, m) => b + (m.done ? m.xp : 0), 0))} XP</div>
       ${q.victory ? `<div class="sl-victorycond">“${esc(q.victory)}”</div>` : ""}${noteLine(q.notes)}</div></div>`;
@@ -1603,7 +1768,7 @@ function renderQuestStats() {
     const status = q.status === "completed" ? `Cleared ${q.completed ? M(q.completed).format("MMM D, YYYY") : ""}` : isActive(q) ? (dl == null ? "No deadline" : dl >= 0 ? `${dl} days left` : `${-dl} days overdue`) : q.status;
     return `<div class="sl-libcard quest ${q.status}">${edBtn(q.path)}
       <div class="sl-libhead">${rankBadge(q.rank, "big")}<div><div class="sl-card-name">${lnk(q.path, q.name)}${q.example ? ` <span class="sl-tag">example</span>` : ""}${!isActive(q) && q.status !== "completed" ? ` <span class="sl-tag">${esc(q.status)}</span>` : ""}</div>
-        <div class="sl-meta">${esc(q.area || "No area")} · ${esc(status)}</div></div></div>
+        <div class="sl-meta">${q.area ? areaTag(q.area) : "No area"} · ${esc(status)}</div></div></div>
       ${noteLine(q.notes)}
       <div class="sl-chips">${chip("Progress", Math.round(q.pct * 100) + "%")}${chip("Milestones", `${done}/${q.ms.length}`)}${chip("XP earned", "+" + fmt(xpOf(q)), "pos")}${chip(q.status === "completed" ? "Days taken" : "Days active", age ?? "—")}</div>
       ${bar(q.pct * 100, "quest")}
@@ -1651,7 +1816,7 @@ function renderLibrary() {
     return `<div class="sl-libcard ${h.polarity}">${edBtn(h.path)}
       <div class="sl-libhead"><span class="sl-libico">${h.icon ? ico(h.icon) : UI(good ? "spark" : "skull")}</span>
         <div><div class="sl-card-name">${lnk(h.path, h.name)}${h.dq ? ` <span class="sl-star">${UI("star")}</span>` : ""}${h.active ? "" : ` <span class="sl-tag">retired</span>`}</div>
-        <div class="sl-meta">${esc(h.area || "No area")} · ${good ? "+" : "−"}${h.xp} XP${h.cue ? " · " + esc(h.cue) : ""}</div></div></div>
+        <div class="sl-meta">${h.area ? areaTag(h.area) : "No area"} · ${good ? "+" : "−"}${h.xp} XP${h.cue ? " · " + esc(h.cue) : ""}</div></div></div>
       ${noteLine(h.notes)}
       <div class="sl-chips">${chip(good ? "Current streak" : "Days clean", good ? UI("fire") + " " + st.streak : UI("shield") + " " + (clean ?? "∞"))}${chip("Best streak", st.best)}${chip("Last 30 days", good ? Math.round(pctOf(st.last30, 30)) + "%" : st.last30 + "×", !good && st.last30 ? "neg" : "")}${chip("All time", st.total)}</div>
       <div class="sl-libcharts"><div><div class="sl-chtitle">Last 20 weeks</div>${heat(st.set, 20, h.polarity)}</div><div><div class="sl-chtitle">Days per week</div>${weekly(st.set, h.polarity)}</div></div>
@@ -1742,7 +1907,7 @@ const ROUTES = {
   daily: () => renderHabits(OPTS.date || TODAY, "good"), bad: () => renderHabits(OPTS.date || TODAY, "bad"),
   log: renderLog, feed: renderFeed, chart: renderChart, charts: renderCharts, overview: renderOverview,
   rewards: renderRewards, areas: renderAreas, quests: renderQuests, goal: renderGoal, battle: renderBattle,
-  hall: renderHall, milestones: renderMilestones, sidequests: renderSideQuests, icons: renderIcons, prophecy: renderProphecy, codex: renderCodex, library: renderLibrary, queststats: renderQuestStats, sidestats: renderSideStats,
+  hall: renderHall, milestones: renderMilestones, advice: renderAdvice, creator: renderCreator, generator: renderGenerator, sidequests: renderSideQuests, icons: renderIcons, prophecy: renderProphecy, codex: renderCodex, library: renderLibrary, queststats: renderQuestStats, sidestats: renderSideStats,
   habit: renderHabitNote, reward: renderRewardNote, area: renderAreaNote,
 };
 async function runSection(spec) {

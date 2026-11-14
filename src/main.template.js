@@ -196,20 +196,20 @@ class CodexBlock extends MarkdownRenderChild {
 
 /* ================================================================ the dashboard tab */
 const TABS = [
-  ["overview", "Overview", [{ section: "grid", widths: "minmax(360px,1.15fr) 2fr", cols: [["status", "time", "actions", { section: "chart", days: 14 }, { section: "rewards", limit: 4 }, "areas"], ["daily", "bad", { section: "sidequests", compact: true }, "milestones", { section: "feed", limit: 10 }]] }]],
+  ["overview", "Overview", ["creator", { section: "grid", widths: "minmax(360px,1.15fr) 2fr", cols: [["status", "time", "actions", { section: "chart", days: 14 }, { section: "rewards", limit: 4 }, "areas"], ["daily", "bad", { section: "sidequests", compact: true }, "milestones", { section: "feed", limit: 10 }]] }]],
   ["habits", "Habits", ["daily", "bad"]],
-  ["quests", "Quests", ["sidequests", "quests", { section: "milestones", open: 99, showDone: true }]],
+  ["quests", "Quests", ["generator", "sidequests", "quests", { section: "milestones", open: 99, showDone: true }]],
   ["rewards", "Rewards", ["rewards"]],
   ["arcanium", "Arcanium", null, [
     ["library", "Quest Library", ["library", "codex", "queststats", "sidestats"]],
     ["adventure", "Adventure So Far", ["overview", "charts", { section: "chart", days: 30 }]],
     ["hall", "Hall of Triumph", ["hall"]],
   ]],
-  ["profile", "Profile", ["character", "areas"]],
+  ["profile", "Profile", ["character", "advice", "areas"]],
   ["guide", "Guide", []],
 ];
 const RECORD_SECTION = { habit: "habit", goal: "goal", quest: "goal", reward: "reward", area: "area" };
-const HIDDEN_KEYS = new Set(["type", "cssclasses", "history", "claims", "position", "ui_icons"]);
+const HIDDEN_KEYS = new Set(["type", "cssclasses", "history", "claims", "position", "ui_icons", "focus", "setup_done"]);
 
 class CodexView extends ItemView {
   constructor(leaf, plugin) { super(leaf); this.plugin = plugin; this.tab = "overview"; this.sub = {}; this.record = null; this.editing = false; this.stack = []; }

@@ -62,11 +62,15 @@ e.g. *Journeyman Ranger*. Rename a class in a life area's ✎ editor. Type your 
 Each milestone is measurable: a target, a unit, an XP value and a due date. Add them from the Quests tab or the Overview. Each milestone row has its own **✎** to change its description, target, unit, XP or due date.
 
 ## Your character & banner
+- The first time you open the Codex you create your character: name, job, portrait and up to **3 focus stats** you most want to improve. Focus stats get a ★, and the **Profile** tab's training window suggests how to raise the weakest of them (or your weakest stat overall if you haven't picked any).
 - Click the portrait on the Overview or Profile tab to upload your character.
 - **Profile → ✎ Edit profile & settings** changes your name, class, banner image and text, levelling curve and HP rules.
 
 ## Changing icons & pictures
 Open any card's **✎** editor → **Change icon…** (pick an emoji, type your own, or **upload an image**) or **Cover image → Upload…**.
+
+## Quest generator
+On the **Quests** tab, the 🎲 **Quest Generator** rolls a random side quest or main quest (with ready-made milestones). It leans toward your focus stats and your weakest stat. **Roll again** until you like it, then **Accept quest**.
 
 ## Side quests
 Quick one-off tasks such as *Clean house* or *Call doctor*. Add them on the Overview or Quests tab with an XP reward and an optional due date, then tick them off for XP. Completing one also heals 5 HP, like a good habit. Finished side quests leave the list the next day; their XP stays and they're kept in **Arcanium → Quest Library**. Set **Repeats** (every day, every 3 days, weekly, every 2 weeks, monthly, a weekday like every Sunday, or every N days) and a side quest comes back on its next date after you complete it.
