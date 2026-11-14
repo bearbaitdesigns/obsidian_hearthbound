@@ -39,7 +39,7 @@ Habits, quests, rewards and history are stored in the plugin's own `data.json` (
 status
 ```
 ````
-Windows: `status` `character` `banner` `daily` `bad` `sidequests` `milestones` `actions` `time` `chart` `charts` `overview` `rewards` `areas` `quests` `hall` `library` `codex` `feed`.
+Windows: `level` (just level, rank & title — add `style: line` for one line) `status` `character` `banner` `daily` `bad` `sidequests` `milestones` `actions` `time` `chart` `charts` `overview` `rewards` `areas` `quests` `hall` `library` `codex` `feed`.
 
 ## Development
 ```

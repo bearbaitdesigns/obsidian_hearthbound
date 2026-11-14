@@ -470,3 +470,14 @@ img.sl-ico { width: 1.15em; height: 1.15em; object-fit: contain; vertical-align:
 .sl-roll { display: flex; gap: 14px; align-items: flex-start; padding: 12px; border: 1px dashed var(--sl-line); border-radius: 8px; background: var(--sl-card); margin: 6px 0 4px; }
 .sl-dice { font-size: 2.2em; line-height: 1; }
 .sl-rollname { font-size: 1.15em; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+
+/* embeddable level badge */
+.sl-lvbadge { display: inline-flex; align-items: center; gap: 14px; padding: 10px 16px; background: var(--sl-panel); border: 1px solid var(--sl-line); border-radius: 8px; }
+.sl-lvbig { display: flex; flex-direction: column; align-items: center; padding-right: 14px; border-right: 1px solid var(--sl-line); }
+.sl-lvbig span { font-size: 2.2em; font-weight: 700; line-height: 1; }
+.sl-lvbig small { font-size: .62em; letter-spacing: .2em; color: var(--sl-dim); margin-top: 2px; }
+.sl-lvrank { display: flex; align-items: center; gap: 2px; color: var(--sl-dim); font-size: .85em; }
+.sl-lvrank .sl-rank { margin-left: 0; }
+.sl-lvtitle { font-weight: 600; font-size: 1.1em; margin-top: 3px; }
+.sl-lvline { display: inline-flex; align-items: center; gap: 4px; }
+.sl-lvline span { color: var(--sl-dim); }

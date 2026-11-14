@@ -1179,6 +1179,17 @@ function renderGenerator() {
   draw();
 }
 
+// Embeddable badge: just level, rank and title.   ```codex  level  ```   (add `style: line` for a single line)
+function renderLevelBadge() {
+  const rank = hunterRank(LV.lvl), title = CFG.title || autoTitle(LV.lvl);
+  if (OPTS.style === "line") {
+    mount(`<div class="sl-lvline"><b>Level ${LV.lvl}</b>${rankBadge(rank)}<span>${esc(title)}</span></div>`);
+    return;
+  }
+  mount(`<div class="sl-lvbadge"><div class="sl-lvbig"><span>${LV.lvl}</span><small>LEVEL</small></div>
+    <div class="sl-lvinfo"><div class="sl-lvrank">${rankBadge(rank)}<span>Rank ${esc(rank)}</span></div><div class="sl-lvtitle">${esc(title)}</div></div></div>`);
+}
+
 function renderTime() {
   const now = M();
   const span = (u, iso) => { const s = M().startOf(iso || u), e = M().endOf(iso || u); return pctOf(now - s, e - s); };
@@ -1907,7 +1918,7 @@ const ROUTES = {
   daily: () => renderHabits(OPTS.date || TODAY, "good"), bad: () => renderHabits(OPTS.date || TODAY, "bad"),
   log: renderLog, feed: renderFeed, chart: renderChart, charts: renderCharts, overview: renderOverview,
   rewards: renderRewards, areas: renderAreas, quests: renderQuests, goal: renderGoal, battle: renderBattle,
-  hall: renderHall, milestones: renderMilestones, advice: renderAdvice, creator: renderCreator, generator: renderGenerator, sidequests: renderSideQuests, icons: renderIcons, prophecy: renderProphecy, codex: renderCodex, library: renderLibrary, queststats: renderQuestStats, sidestats: renderSideStats,
+  hall: renderHall, milestones: renderMilestones, advice: renderAdvice, creator: renderCreator, generator: renderGenerator, level: renderLevelBadge, sidequests: renderSideQuests, icons: renderIcons, prophecy: renderProphecy, codex: renderCodex, library: renderLibrary, queststats: renderQuestStats, sidestats: renderSideStats,
   habit: renderHabitNote, reward: renderRewardNote, area: renderAreaNote,
 };
 async function runSection(spec) {

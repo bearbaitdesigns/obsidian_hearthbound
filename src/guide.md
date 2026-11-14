@@ -82,7 +82,15 @@ Any note can embed a window with a `codex` block:
 status
 ```
 ````
-Windows: `status` `character` `banner` `daily` `bad` `sidequests` `milestones` `actions` `time` `chart` `charts` `overview` `rewards` `areas` `quests` `hall` `library` `codex` `feed`.
+Windows: `level` `status` `character` `banner` `daily` `bad` `sidequests` `milestones` `actions` `time` `chart` `charts` `overview` `rewards` `areas` `quests` `hall` `library` `codex` `feed`.
+
+Just your level, rank and title (great for a homepage or daily note):
+````
+```codex
+level
+```
+````
+Add `style: line` on a second line for a one-line version.
 
 ## Backup
 Settings → Hearthbound Codex → **Export backup** saves everything as a JSON file in your vault.
