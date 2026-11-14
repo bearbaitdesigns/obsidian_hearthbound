@@ -485,7 +485,7 @@ async function removeEntity(kind, path) {
   const f = app.vault.getAbstractFileByPath(path);
   if (!f) throw new Error("File not found");
   const name = f.basename;
-  if (kind === "habit" || kind === "reward") { await setFM(path, fm => { fm.active = false; }); toast(`${name} retired. Its history is kept — restore it any time from the ${kind === "habit" ? "Habit Codex" : "Reward Shop"}.`); }
+  if (kind === "habit" || kind === "reward") { await setFM(path, fm => { fm.active = false; }); toast(`${name} retired. Its history is kept — restore it from its ✎ editor (${kind === "habit" ? "Arcanium → Quest Library → Retired" : "Rewards → Retired rewards"}).`); }
   else if (kind === "quest") { await setFM(path, fm => { fm.status = "abandoned"; }); toast(`Quest abandoned: ${name}. Restore or delete it from the Quest Log.`); }
   else { await app.vault.trash(f, false); toast(`${name} moved to the vault trash (.trash).`); }
 }
@@ -667,6 +667,13 @@ async function openEditor(path) {
   const xpLabel = type === "habit" && String(pg.polarity) === "bad" ? "XP lost when you slip" : null;
   const showIcon = ["habit", "reward", "area", "vision-board", "future-self", "goal", "quest", "sidequest"].includes(type);
   const isProfile = type === "profile";
+  // Retire (habits, rewards) / Abandon (quests) live here, next to Delete
+  const isQuest = type === "goal" || type === "quest", qStatus = String(pg.status || "active").toLowerCase();
+  const retireCtl = (type === "habit" || type === "reward")
+    ? (pg.active === false ? `<button class="sl-btn xs" data-restorecard="${type}">Restore</button>` : `<button class="sl-btn xs ghost" data-retirecard="${type}" title="Hide it but keep its history">Retire</button>`)
+    : isQuest && qStatus !== "completed"
+      ? (qStatus === "abandoned" ? `<button class="sl-btn xs" data-restorecard="quest">Restore quest</button>` : `<button class="sl-btn xs ghost" data-retirecard="quest" title="Move it to Dormant / Abandoned">Abandon</button>`)
+      : "";
   const p = popup(`Edit — ${name}`, `
     <label class="sl-edrow"><span>Name</span><input class="sl-addin" data-name="1" value="${esc(name)}"></label>
     ${fields.map(f => input(xpLabel && f[0] === "xp" ? [f[0], f[1], xpLabel] : f)).join("")}
@@ -674,9 +681,16 @@ async function openEditor(path) {
     ${isProfile ? "" : `<div class="sl-edrow"><span>Cover image</span><div class="sl-edinline"><span class="sl-edcover">${state.cover && imgSrc(state.cover) ? `<img src="${esc(imgSrc(state.cover))}">` : `<span class="sl-defico">—</span>`}</span>
       <button class="sl-btn xs" data-cover="1">Upload…</button><button class="sl-btn xs ghost" data-nocover="1">Remove</button><input type="file" accept="image/*" hidden data-coverfile="1"></div></div>
     <label class="sl-edrow top"><span>Notes</span><textarea class="sl-addin" rows="4" data-notes="1" placeholder="Anything you want to remember…">${esc(pg.notes || "")}</textarea></label>`}
-    <div class="sl-actions"><button class="sl-btn" data-save="1">Save</button><button class="sl-btn ghost" data-cancel="1">Cancel</button>${isProfile ? "" : `<span style="flex:1"></span><button class="sl-btn xs red" data-delcard="1">Delete…</button>`}</div>`);
+    <div class="sl-actions"><button class="sl-btn" data-save="1">Save</button><button class="sl-btn ghost" data-cancel="1">Cancel</button>${isProfile ? "" : `<span style="flex:1"></span>${retireCtl}<button class="sl-btn xs red" data-delcard="1">Delete…</button>`}</div>`);
   const el = p.el;
   bindRepeat(el);
+  const retBtn = el.querySelector("[data-retirecard]");
+  if (retBtn) retBtn.addEventListener("click", async () => {
+    if (!retBtn.classList.contains("armed")) { retBtn.classList.add("armed"); retBtn.textContent = retBtn.dataset.retirecard === "quest" ? "Click again to abandon" : "Click again to retire"; return; }
+    try { await removeEntity(retBtn.dataset.retirecard, path); p.close(); } catch (e) { toast("⚠ " + e.message, "bad"); }
+  });
+  const resBtn = el.querySelector("[data-restorecard]");
+  if (resBtn) resBtn.addEventListener("click", async () => { try { await restoreEntity(resBtn.dataset.restorecard, path); p.close(); } catch (e) { toast("⚠ " + e.message, "bad"); } });
   const delBtn = el.querySelector("[data-delcard]");
   if (delBtn) delBtn.addEventListener("click", async () => {
     if (!delBtn.classList.contains("armed")) {
@@ -1025,7 +1039,7 @@ function renderActions() {
       <button class="sl-btn" data-kind="quest">＋ Quest / Goal</button>
       <button class="sl-btn gold" data-kind="reward">＋ Reward</button>
     </div>
-    <div class="sl-meta" style="margin-top:8px">Remove anything with the ✕ on its card (habits &amp; rewards are retired, keeping their XP history).</div>
+    <div class="sl-meta" style="margin-top:8px">Edit, retire or delete anything from the ✎ on its card.</div>
 `;
   const el = mount(win("QUICK ACTIONS", body));
   const input = el.querySelector(".sl-input");
@@ -1041,7 +1055,7 @@ function habitCards(date, pol) {
     const done = doneSet.has(h.key);
     const area = h.area ? `<div class="sl-meta">${esc(h.area)}</div>` : "";
     if (pol === "good") return `
-      <div class="sl-card ${done ? "is-done" : ""}">${edBtn(h.path)}${rmBtn("habit", h.path, "✕", "Retire habit")}
+      <div class="sl-card ${done ? "is-done" : ""}">${edBtn(h.path)}
         ${art(h, "spark")}
         <div class="sl-card-body">
           <div class="sl-card-name">${lnk(h.path, h.name)}${h.dq ? `<span class="sl-star" title="Daily Quest">${UI("star")}</span>` : ""}</div>
@@ -1052,7 +1066,7 @@ function habitCards(date, pol) {
         </div></div>`;
     const s = cleanStreak(h.key);
     return `
-      <div class="sl-card bad ${done ? "is-hit" : ""}">${edBtn(h.path)}${rmBtn("habit", h.path, "✕", "Retire habit")}
+      <div class="sl-card bad ${done ? "is-hit" : ""}">${edBtn(h.path)}
         ${art(h, "skull")}
         <div class="sl-card-body">
           <div class="sl-card-name">${lnk(h.path, h.name)}</div>
@@ -1293,7 +1307,7 @@ function rewardCard(r) {
   else if (locked) status = `<div class="sl-xpline neg">${UI("lock")} Unlocks at Level ${r.minLevel}</div>`;
   else if (afford) status = `<div class="sl-xpline ok">● Available now</div>`;
   else status = `<div class="sl-xpline neg">● Need ${fmt(r.cost - gold)} more XP</div>`;
-  return `<div class="sl-card reward ${soldOut ? "is-done" : ""}">${edBtn(r.path)}${rmBtn("reward", r.path, "✕", "Retire reward")}
+  return `<div class="sl-card reward ${soldOut ? "is-done" : ""}">${edBtn(r.path)}
     ${art(r, "gift")}
     <div class="sl-card-body">
       <div class="sl-card-name">${lnk(r.path, r.name)}</div>
@@ -1372,7 +1386,7 @@ function questCard(q, removable) {
   const dl = q.deadline ? daysFrom(TODAY, q.deadline) : null;
   return `<div class="sl-quest">
     <div class="sl-qhead">${rankBadge(q.rank)}<div class="sl-qname">${lnk(q.path, q.name)}${q.example ? ` <span class="sl-tag">example</span>` : ""}<div class="sl-meta">${esc(q.area || "—")} · reward ${fmt(q.xp)} XP${q.deadline ? ` · deadline ${M(q.deadline).format("MMM D, YYYY")} (${dl >= 0 ? dl + "d left" : "overdue"})` : ""}</div></div>
-    <div class="sl-qpct">${Math.round(q.pct * 100)}%</div>${edBtn(q.path)}${removable ? rmBtn("quest", q.path, "✕", "Abandon quest") : ""}</div>
+    <div class="sl-qpct">${Math.round(q.pct * 100)}%</div>${edBtn(q.path)}</div>
     ${bar(q.pct * 100, "quest")}
     ${claimBtn(q)}${noteLine(q.notes)}<div class="sl-meta">${q.ms.filter(m => m.done).length}/${q.ms.length} milestones${next ? ` · next: <b>${esc(next.text)}</b>${next.due ? " (" + M(next.due).format("MMM D") + ")" : ""}` : ""}</div>
   </div>`;
@@ -1682,7 +1696,7 @@ function heat(set, weeks, pol) {
 function renderCodex() {
   const rows = habits.map(h => {
     const st = habitStats(h);
-    const ctl = h.active ? edBtn(h.path) + rmBtn("habit", h.path, "✕", "Retire habit") : `<button class="sl-btn xs ghost" data-restore="habit" data-p="${esc(h.path)}">Restore</button>`;
+    const ctl = h.active ? edBtn(h.path) : `<button class="sl-btn xs ghost" data-restore="habit" data-p="${esc(h.path)}">Restore</button>`;
     return `<tr class="${h.polarity} ${h.active ? "" : "retired"}"><td class="hn">${ico(h.icon)} ${lnk(h.path, h.name)}${h.dq ? " " + UI("star") : ""}${h.active ? "" : ` <span class="sl-tag">retired</span>`}</td><td>${h.polarity === "good" ? "+" : "−"}${h.xp}</td>
       <td>${esc(h.area)}</td><td>${h.polarity === "good" ? `${UI("fire")} ${st.streak}` : `${UI("shield")} ${cleanStreak(h.key) ?? "∞"}`}</td><td>${h.polarity === "good" ? st.best : "—"}</td>
       <td>${h.polarity === "good" ? Math.round(pctOf(st.last30, 30)) + "%" : st.last30 + "×"}</td><td>${st.total}</td><td>${heat(st.set, 8, h.polarity)}</td><td>${ctl}</td></tr>`;

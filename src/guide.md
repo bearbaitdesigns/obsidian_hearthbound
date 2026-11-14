@@ -30,7 +30,7 @@ Everything you track is stored inside the plugin itself. **No notes and no daily
 - **HP** carries over between days. Bad habits deal damage equal to their XP, each good habit heals 5, and you regenerate 10 per day. **At 0 HP you fall and lose a level**, then come back at full HP minus the extra damage.
 - **Gold** (XP left) = total XP − rewards claimed. Spending never lowers your level.
 - **Stats:** each life area grants a stat (VIT, STR, AGI, INT, WIS…) = 10 + 1 per 100 XP earned in it.
-- **Removing:** the ✕ on a card *retires* a habit or reward (its history stays) or *abandons* a quest; restore them from Arcanium → Quest Library, Rewards or Quests. To remove something for good, open its **✎** editor → **Delete…** (click twice). Deleting a habit erases its history; deleting a quest or side quest removes the XP it gave.
+- **Retiring & deleting:** open a card's **✎** editor. **Retire** hides a habit or reward but keeps its history; **Abandon** does the same for a quest. Retired and abandoned items can be restored from their editor (find them in Arcanium → Quest Library → Retired, Rewards → Retired rewards, or Quests → Dormant). **Delete…** removes something for good: deleting a habit erases its history; deleting a quest or side quest removes the XP it gave.
 
 ## Titles, ranks & jobs
 Your **title** and **rank** are earned as you level:
