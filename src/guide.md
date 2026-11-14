@@ -14,7 +14,7 @@ Everything you track is stored inside the plugin itself. **No notes and no daily
 | **Arcanium → Quest Library** | Habits first: each habit's streaks, 30-day rate, 20-week heatmap and days-per-week chart, plus the summary table (retired habits live here too). Then main-quest stats (progress, milestones, XP earned, days active) and side-quest stats (completed, XP, on-time rate, weekly chart, full history). |
 | **Arcanium → Adventure So Far** | Weekly and monthly overviews and long-term graphs |
 | **Arcanium → Hall of Triumph** | Every quest you have completed, shown as trophies |
-| **Profile** | Your character sheet (click the portrait to upload your own), life areas and the Icon Forge |
+| **Profile** | Your character sheet (click the portrait to upload your own) and life areas |
 
 **Editing anything:** hover a card and click **✎** (or click its name). A pop-up lets you change its name, XP or cost, icon, cover image, notes and its other settings.
 
@@ -30,7 +30,7 @@ Everything you track is stored inside the plugin itself. **No notes and no daily
 - **HP** carries over between days. Bad habits deal damage equal to their XP, each good habit heals 5, and you regenerate 10 per day. **At 0 HP you fall and lose a level**, then come back at full HP minus the extra damage.
 - **Gold** (XP left) = total XP − rewards claimed. Spending never lowers your level.
 - **Stats:** each life area grants a stat (VIT, STR, AGI, INT, WIS…) = 10 + 1 per 100 XP earned in it.
-- **Removing:** habits and rewards are *retired* (their history stays); quests are *abandoned*. Restore them from the Habits, Rewards or Quests tab.
+- **Removing:** the ✕ on a card *retires* a habit or reward (its history stays) or *abandons* a quest; restore them from Arcanium → Quest Library, Rewards or Quests. To remove something for good, open its **✎** editor → **Delete…** (click twice). Deleting a habit erases its history; deleting a quest or side quest removes the XP it gave.
 
 ## Titles, ranks & jobs
 Your **title** and **rank** are earned as you level:
@@ -65,12 +65,11 @@ Each milestone is measurable: a target, a unit, an XP value and a due date. Add 
 - Click the portrait on the Overview or Profile tab to upload your character.
 - **Profile → ✎ Edit profile & settings** changes your name, class, banner image and text, levelling curve and HP rules.
 
-## Changing icons
-- **Any card icon or picture** (habits, rewards, life areas, quests…): open the card's **✎** editor → **Change icon…** (emoji or **upload an image**) or **Cover image → Upload…**.
-- **Interface icons** (stars, trophies, streak flames, rank badges…): **Profile → Icon Forge**, click the one you want to change.
+## Changing icons & pictures
+Open any card's **✎** editor → **Change icon…** (pick an emoji, type your own, or **upload an image**) or **Cover image → Upload…**.
 
 ## Side quests
-Quick one-off tasks such as *Clean house* or *Call doctor*. Add them on the Overview or Quests tab with an XP reward and an optional due date, then tick them off for XP. Completing one also heals 5 HP, like a good habit. Finished side quests leave the list the next day; their XP stays and they're kept in **Arcanium → Quest Library**.
+Quick one-off tasks such as *Clean house* or *Call doctor*. Add them on the Overview or Quests tab with an XP reward and an optional due date, then tick them off for XP. Completing one also heals 5 HP, like a good habit. Finished side quests leave the list the next day; their XP stays and they're kept in **Arcanium → Quest Library**. Set **Repeats** (every day, every 3 days, weekly, every 2 weeks, monthly, a weekday like every Sunday, or every N days) and a side quest comes back on its next date after you complete it.
 
 ## Showing a Codex window inside your own notes
 Any note can embed a window with a `codex` block:
@@ -79,7 +78,7 @@ Any note can embed a window with a `codex` block:
 status
 ```
 ````
-Windows: `status` `character` `banner` `daily` `bad` `sidequests` `milestones` `icons` `actions` `time` `chart` `charts` `overview` `rewards` `areas` `quests` `hall` `library` `codex` `feed`.
+Windows: `status` `character` `banner` `daily` `bad` `sidequests` `milestones` `actions` `time` `chart` `charts` `overview` `rewards` `areas` `quests` `hall` `library` `codex` `feed`.
 
 ## Backup
 Settings → Hearthbound Codex → **Export backup** saves everything as a JSON file in your vault.

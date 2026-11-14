@@ -8,15 +8,15 @@ Everything opens in its own dashboard tab — no Dataview, no daily notes, no cl
 - **Overview** — status window (level, rank, title, HP/EXP bars, stats), daily quest, penalty zone, side quests, quest milestones, XP chart, reward shop, life areas and a chronicle of everything you've earned.
 - **Habits** — complete good habits, log slips on bad ones. Streaks, clean streaks and a Daily Quest bonus for clearing every ★ habit.
 - **Quests** — main quests broken into measurable milestones (`current / target / unit`, XP, due date). Log progress with + / −, then **Claim victory**.
-- **Side quests** — one-off tasks ("Clean house", "Call doctor") with XP and an optional due date. Finished ones clear from the list the next day and stay in your history.
+- **Side quests** — one-off or repeating tasks ("Clean house" every Sunday, "Call doctor") with XP and an optional due date. Finished ones clear from the list the next day and stay in your history; repeating ones come back on their next date.
 - **Rewards** — spend the XP you earn; one-time or repeatable rewards, level-locked rewards.
 - **Arcanium**
   - **Quest Library** — every habit's streaks, 30-day rate, 20-week heatmap and weekly chart, then main-quest and side-quest stats.
   - **Adventure So Far** — weekly and monthly overviews, XP growth, level progression and consistency graphs.
   - **Hall of Triumph** — every quest you've cleared, as trophies.
-- **Profile** — character sheet with your own portrait, life areas (VIT, STR, AGI, INT, WIS…) and the **Icon Forge** for swapping any interface icon for an emoji or your own image.
+- **Profile** — character sheet with your own portrait and life areas (VIT, STR, AGI, INT, WIS…). Titles and jobs are earned as you level.
 - **HP & falling** — bad habits deal damage, good habits heal, you regenerate daily. Hit 0 HP and you lose a level.
-- **Edit anything in place** — every card has a ✎ pop-up for name, XP / cost, icon, cover image, notes and its own settings.
+- **Edit anything in place** — every card has a ✎ pop-up for name, XP / cost, icon, cover image, notes, its own settings and Delete.
 
 ## Install with BRAT (beta)
 1. Install **BRAT** from *Settings → Community plugins → Browse* and enable it.
@@ -39,7 +39,7 @@ Habits, quests, rewards and history are stored in the plugin's own `data.json` (
 status
 ```
 ````
-Windows: `status` `character` `banner` `daily` `bad` `sidequests` `milestones` `actions` `time` `chart` `charts` `overview` `rewards` `areas` `quests` `hall` `library` `codex` `feed` `icons`.
+Windows: `status` `character` `banner` `daily` `bad` `sidequests` `milestones` `actions` `time` `chart` `charts` `overview` `rewards` `areas` `quests` `hall` `library` `codex` `feed`.
 
 ## Development
 ```

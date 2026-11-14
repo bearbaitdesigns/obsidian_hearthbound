@@ -134,9 +134,55 @@ const habits = ALL.where(p => p.type === "habit").array().map(p => ({
   history: toArr(p.history).map(dstr).filter(Boolean),
 })).sort((a, b) => (b.dq - a.dq) || (b.xp - a.xp) || a.name.localeCompare(b.name));
 const H = Object.fromEntries(habits.map(h => [h.key, h]));
-const sideQuests = ALL.where(p => p.type === "sidequest").array().map(p => ({
-  name: p.file.name, path: p.file.path, xp: num(p.xp, 10), due: dstr(p.due), done: dstr(p.done), created: dstr(p.created), notes: p.notes || "", area: p.area ? nameOf(p.area) : "",
-}));
+// Side quests. `repeat` makes one come back after it's completed:
+//   1d, 3d, 7d, 14d … (every N days) · 1m (monthly) · mon … sun (every that weekday)
+// A repeating side quest keeps every completion date in `completions` and hides until `next`.
+const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+function normRepeat(r) {
+  const s = String(r || "").trim().toLowerCase();
+  if (!s || s === "none" || s === "no") return "";
+  if (/^\d+\s*d(ays?)?$/.test(s)) return parseInt(s) + "d";
+  if (/^\d+\s*w(eeks?)?$/.test(s)) return parseInt(s) * 7 + "d";
+  if (/^(\d+\s*)?m(onths?)?$/.test(s) || s === "monthly") return (parseInt(s) || 1) + "m";
+  if (s === "daily") return "1d";
+  if (s === "weekly") return "7d";
+  const wd = WEEKDAYS.findIndex(w => s.startsWith(w));
+  return wd >= 0 ? WEEKDAYS[wd] : "";
+}
+function nextOccurrence(rep, from) {
+  const r = normRepeat(rep);
+  if (!r) return null;
+  if (r.endsWith("d")) return M(from).add(parseInt(r), "days").format("YYYY-MM-DD");
+  if (r.endsWith("m")) return M(from).add(parseInt(r), "months").format("YYYY-MM-DD");
+  const target = WEEKDAYS.indexOf(r), d = M(from).add(1, "day");
+  while (d.isoWeekday() % 7 !== target) d.add(1, "day");
+  return d.format("YYYY-MM-DD");
+}
+function repeatLabel(rep) {
+  const r = normRepeat(rep);
+  if (!r) return "";
+  if (r === "1d") return "every day";
+  if (r === "7d") return "every week";
+  if (r === "14d") return "every 2 weeks";
+  if (r.endsWith("d")) return `every ${parseInt(r)} days`;
+  if (r === "1m") return "every month";
+  if (r.endsWith("m")) return `every ${parseInt(r)} months`;
+  return "every " + WEEKDAY_NAMES[WEEKDAYS.indexOf(r)];
+}
+const sideQuests = ALL.where(p => p.type === "sidequest").array().map(p => {
+  const repeat = normRepeat(p.repeat), completions = toArr(p.completions).map(dstr).filter(Boolean).sort();
+  const done = dstr(p.done), next = dstr(p.next);
+  const doneDates = repeat ? completions.concat(done && !completions.includes(done) ? [done] : []) : (done ? [done] : []);
+  const doneToday = doneDates.includes(TODAY);
+  return {
+    name: p.file.name, path: p.file.path, xp: num(p.xp, 10), due: dstr(p.due), done, next, repeat, completions, doneDates, doneToday,
+    created: dstr(p.created), notes: p.notes || "", area: p.area ? nameOf(p.area) : "",
+    // open = shown in the list right now
+    open: repeat ? !doneToday && (!next || next <= TODAY) : !done,
+    resting: repeat && !doneToday && next && next > TODAY,
+  };
+});
 const dqHabits = habits.filter(h => h.polarity === "good" && h.active && h.dq);
 
 // Check-ins live inside each habit note: `history:` is the list of dates it was done (good) or slipped (bad).
@@ -180,6 +226,8 @@ const quests = ALL.where(p => p.type === "goal" || p.type === "quest").array().m
     ms, pct: status === "completed" ? 1 : (tw ? ms.reduce((a, m) => a + m.w * m.pct, 0) / tw : 0),
   };
 });
+// one order for quests everywhere: nearest deadline first, then name
+const questOrder = (a, b) => (a.deadline || "9999").localeCompare(b.deadline || "9999") || a.name.localeCompare(b.name);
 const isActive = q => ["active", "in progress", "in-progress"].includes(q.status);
 
 const rewards = ALL.where(p => p.type === "reward").array().map(p => ({
@@ -196,7 +244,7 @@ for (const l of Object.values(logByDate)) {
   for (const k of b) { const h = H[k]; if (h && h.polarity === "bad") events.push({ date: l.date, xp: -h.xp, kind: "bad", area: h.area, label: h.name }); }
   if (dqHabits.length && dqHabits.every(h => g.has(h.key))) events.push({ date: l.date, xp: CFG.dqBonus, kind: "bonus", label: "Daily Quest cleared" });
 }
-for (const sq of sideQuests) if (sq.done) events.push({ date: sq.done, xp: sq.xp, kind: "side", area: sq.area, label: `Side quest: ${sq.name}` });
+for (const sq of sideQuests) for (const d of sq.doneDates) events.push({ date: d, xp: sq.xp, kind: "side", area: sq.area, label: `Side quest: ${sq.name}` });
 for (const q of quests) {
   if (q.example) continue;
   for (const m of q.ms) if (m.done && m.xp) events.push({ date: m.doneOn || q.completed, xp: m.xp, kind: "milestone", area: q.area, label: `${m.text} (${q.name})` });
@@ -509,7 +557,7 @@ function openIconPicker(title, current, onPick) {
   document.querySelectorAll(".sl-picker-back").forEach(x => x.remove());
   const back = document.createElement("div");
   back.className = "sl-picker-back sl-root";
-  const curHtml = current ? (isImg(current) ? (imgSrc(current) ? `<img src="${esc(imgSrc(current))}">` : "") : `<span>${esc(current)}</span>`) : `<span class="sl-meta">default</span>`;
+  const curHtml = current ? (isImg(current) ? (imgSrc(current) ? `<img src="${esc(imgSrc(current))}">` : "") : `<span>${esc(current)}</span>`) : `<span class="sl-defico" title="Default">—</span>`;
   back.innerHTML = `<div class="sl-picker"><div class="sl-picker-head"><b>${esc(title)}</b><span class="sl-picker-cur">${curHtml}</span></div>
     <div class="sl-emojigrid">${EMOJI.map(e => `<button class="sl-emo" data-emo="${esc(e)}">${esc(e)}</button>`).join("")}</div>
     <div class="sl-actions"><input class="sl-addin sl-emoin" placeholder="…or type / paste any emoji or symbol" maxlength="8"><button class="sl-btn xs" data-use="1">Use</button></div>
@@ -564,7 +612,7 @@ const EDIT_FIELDS = {
   reward: [["cost", "number", "Cost (XP)"], ["repeatable", "bool", "Can be claimed again"], ["min_level", "number", "Unlocks at level"]],
   area: [["stat", "text", "Stat (e.g. STR, WIS)"], ["class", "text", "Class when this is your strongest stat (e.g. Ranger)"], ["description", "text", "Description"]],
   goal: [["rank", "select:E,D,C,B,A,S", "Rank"], ["xp_reward", "number", "XP for clearing the quest"], ["area", "area", "Life area"], ["deadline", "date", "Deadline"], ["victory", "text", "Victory condition"]],
-  sidequest: [["xp", "number", "XP reward"], ["due", "date", "Due date"], ["area", "area", "Life area"]],
+  sidequest: [["xp", "number", "XP reward"], ["due", "date", "Due date"], ["repeat", "repeat", "Repeats"], ["area", "area", "Life area"]],
   "vision-board": [["horizon", "text", "Horizon (e.g. 2027)"], ["__body", "body", "Content (vision text — images are added on the Prophecy tab)"]],
   "future-self": [["horizon", "text", "Horizon (e.g. 5 years)"], ["__body", "body", "Write-up"]],
   profile: [["player_name", "text", "Player name"], ["job_class", "text", "Job (empty = earned automatically)"], ["title", "text", "Title (empty = earned automatically)"],
@@ -591,6 +639,7 @@ async function uploadTo(folder, file, prefix) {
   await app.vault.createBinary(path, await file.arrayBuffer());
   return path;
 }
+const defaultIconFor = pg => UI(pg.type === "habit" ? (String(pg.polarity) === "bad" ? "skull" : "spark") : pg.type === "reward" ? "gift" : pg.type === "goal" || pg.type === "quest" ? "sword" : pg.type === "sidequest" ? "check" : "spark");
 async function openEditor(path) {
   let pg = ALL.where(p => p.file.path === path).first();
   const file = app.vault.getAbstractFileByPath(path);
@@ -608,8 +657,9 @@ async function openEditor(path) {
     else if (kind === "number") ctl = `<input class="sl-addin" type="number" step="any" data-k="${k}" value="${esc(val(v))}">`;
     else if (kind === "date") ctl = `<input class="sl-addin date" type="date" data-k="${k}" value="${esc(dstr(v) || "")}">`;
     else if (kind === "area") ctl = `<select class="sl-addin" data-k="${k}"><option value="">—</option>${areas.map(a => `<option ${norm(v) === a.key ? "selected" : ""}>${esc(a.name)}</option>`).join("")}</select>`;
+    else if (kind === "repeat") ctl = `<div class="sl-edinline">${repeatSelect(v, `data-k="${k}"`)}</div>`;
     else if (kind === "body") ctl = `<textarea class="sl-addin sl-edbody" rows="10" data-k="${k}">${esc(bodyText)}</textarea>`;
-    else if (kind === "image") { state.images[k] = v ? val(v) : null; ctl = `<div class="sl-edinline"><span class="sl-edcover" data-imgprev="${k}">${v && imgSrc(v) ? `<img src="${esc(imgSrc(v))}">` : `<span class="sl-meta">none</span>`}</span><button class="sl-btn xs" data-imgup="${k}">Upload…</button><button class="sl-btn xs ghost" data-imgrm="${k}">Remove</button><input type="file" accept="image/*" hidden data-imgfile="${k}"></div>`; }
+    else if (kind === "image") { state.images[k] = v ? val(v) : null; ctl = `<div class="sl-edinline"><span class="sl-edcover" data-imgprev="${k}">${v && imgSrc(v) ? `<img src="${esc(imgSrc(v))}">` : `<span class="sl-defico">—</span>`}</span><button class="sl-btn xs" data-imgup="${k}">Upload…</button><button class="sl-btn xs ghost" data-imgrm="${k}">Remove</button><input type="file" accept="image/*" hidden data-imgfile="${k}"></div>`; }
     else if (kind.startsWith("select:")) ctl = `<select class="sl-addin" data-k="${k}">${kind.slice(7).split(",").map(o => `<option ${String(v || "").toUpperCase() === o ? "selected" : ""}>${o}</option>`).join("")}</select>`;
     else ctl = `<input class="sl-addin" data-k="${k}" value="${esc(val(v))}">`;
     return kind === "image" ? `<div class="sl-edrow"><span>${esc(label)}</span>${ctl}</div>` : `<label class="sl-edrow ${kind === "body" ? "top" : ""}"><span>${esc(label)}</span>${ctl}</label>`;
@@ -620,17 +670,27 @@ async function openEditor(path) {
   const p = popup(`Edit — ${name}`, `
     <label class="sl-edrow"><span>Name</span><input class="sl-addin" data-name="1" value="${esc(name)}"></label>
     ${fields.map(f => input(xpLabel && f[0] === "xp" ? [f[0], f[1], xpLabel] : f)).join("")}
-    ${showIcon ? `<div class="sl-edrow"><span>Icon</span><div class="sl-edinline"><span class="sl-edicon">${state.icon ? ico(state.icon) : `<span class="sl-meta">default</span>`}</span><button class="sl-btn xs" data-icon="1">Change icon…</button></div></div>` : ""}
-    ${isProfile ? "" : `<div class="sl-edrow"><span>Cover image</span><div class="sl-edinline"><span class="sl-edcover">${state.cover && imgSrc(state.cover) ? `<img src="${esc(imgSrc(state.cover))}">` : `<span class="sl-meta">none</span>`}</span>
+    ${showIcon ? `<div class="sl-edrow"><span>Icon</span><div class="sl-edinline"><span class="sl-edicon">${state.icon ? ico(state.icon) : `<span class="sl-defico" title="Default icon">${defaultIconFor(pg)}</span>`}</span><button class="sl-btn xs" data-icon="1">Change icon…</button></div></div>` : ""}
+    ${isProfile ? "" : `<div class="sl-edrow"><span>Cover image</span><div class="sl-edinline"><span class="sl-edcover">${state.cover && imgSrc(state.cover) ? `<img src="${esc(imgSrc(state.cover))}">` : `<span class="sl-defico">—</span>`}</span>
       <button class="sl-btn xs" data-cover="1">Upload…</button><button class="sl-btn xs ghost" data-nocover="1">Remove</button><input type="file" accept="image/*" hidden data-coverfile="1"></div></div>
     <label class="sl-edrow top"><span>Notes</span><textarea class="sl-addin" rows="4" data-notes="1" placeholder="Anything you want to remember…">${esc(pg.notes || "")}</textarea></label>`}
-    <div class="sl-actions"><button class="sl-btn" data-save="1">Save</button><button class="sl-btn ghost" data-cancel="1">Cancel</button></div>`);
+    <div class="sl-actions"><button class="sl-btn" data-save="1">Save</button><button class="sl-btn ghost" data-cancel="1">Cancel</button>${isProfile ? "" : `<span style="flex:1"></span><button class="sl-btn xs red" data-delcard="1">Delete…</button>`}</div>`);
   const el = p.el;
+  bindRepeat(el);
+  const delBtn = el.querySelector("[data-delcard]");
+  if (delBtn) delBtn.addEventListener("click", async () => {
+    if (!delBtn.classList.contains("armed")) {
+      delBtn.classList.add("armed");
+      delBtn.textContent = type === "habit" ? "Click again — deletes its whole history" : (type === "goal" || type === "quest" || type === "sidequest") ? "Click again — its XP is removed" : "Click again to delete";
+      return;
+    }
+    try { await app.vault.trash(app.vault.getAbstractFileByPath(path), false); p.close(); toast(`Deleted: ${name}`); } catch (e) { toast("⚠ " + e.message, "bad"); }
+  });
   const iconBtn = el.querySelector("[data-icon]");
   if (iconBtn) iconBtn.addEventListener("click", () => {
     // reuse the icon picker, then come back to this editor's state
     const keepEl = el; keepEl.style.display = "none";
-    openIconPickerInline(state.icon, v => { state.icon = v; keepEl.querySelector(".sl-edicon").innerHTML = v ? ico(v) : `<span class="sl-meta">default</span>`; document.body.appendChild(keepEl); keepEl.style.display = ""; },
+    openIconPickerInline(state.icon, v => { state.icon = v; keepEl.querySelector(".sl-edicon").innerHTML = v ? ico(v) : `<span class="sl-defico" title="Default icon">${defaultIconFor(pg)}</span>`; document.body.appendChild(keepEl); keepEl.style.display = ""; },
       () => { document.body.appendChild(keepEl); keepEl.style.display = ""; });
   });
   const cf = el.querySelector("[data-coverfile]");
@@ -641,13 +701,13 @@ async function openEditor(path) {
       state.cover = await uploadTo("_System/Assets/Covers", f, "cover");
       el.querySelector(".sl-edcover").innerHTML = `<img src="${esc(imgSrc(state.cover) || "")}">`;
     });
-    el.querySelector("[data-nocover]").addEventListener("click", () => { state.cover = null; el.querySelector(".sl-edcover").innerHTML = `<span class="sl-meta">none</span>`; });
+    el.querySelector("[data-nocover]").addEventListener("click", () => { state.cover = null; el.querySelector(".sl-edcover").innerHTML = `<span class="sl-defico">—</span>`; });
   }
   el.querySelectorAll("[data-imgup]").forEach(b => {
     const k = b.dataset.imgup, fi = el.querySelector(`[data-imgfile="${k}"]`), prev = el.querySelector(`[data-imgprev="${k}"]`);
     b.addEventListener("click", () => fi.click());
     fi.addEventListener("change", async () => { const f = fi.files && fi.files[0]; if (!f) return; state.images[k] = await uploadTo("_System/Assets", f, k); prev.innerHTML = `<img src="${esc(imgSrc(state.images[k]) || "")}">`; });
-    el.querySelector(`[data-imgrm="${k}"]`).addEventListener("click", () => { state.images[k] = null; prev.innerHTML = `<span class="sl-meta">none</span>`; });
+    el.querySelector(`[data-imgrm="${k}"]`).addEventListener("click", () => { state.images[k] = null; prev.innerHTML = `<span class="sl-defico">—</span>`; });
   });
   el.querySelector("[data-cancel]").addEventListener("click", p.close);
   el.querySelector("[data-save]").addEventListener("click", async () => {
@@ -656,6 +716,7 @@ async function openEditor(path) {
       el.querySelectorAll("[data-k]").forEach(i => {
         const k = i.dataset.k, kind = (fields.find(f => f[0] === k) || [])[1];
         if (kind === "body" || kind === "image" || i.tagName === "INPUT" && i.type === "file") return;
+        if (kind === "repeat") { values[k] = readRepeat(i.parentNode) || null; return; }
         if (kind === "bool") values[k] = i.checked;
         else if (kind === "number") values[k] = i.value === "" ? null : +i.value;
         else if (kind === "area") values[k] = i.value ? `[[${i.value}]]` : null;
@@ -756,30 +817,63 @@ function bindEditors(el) {
 }
 
 // ---- Side quests: one-off tasks with an XP reward and optional due date
+const REPEAT_OPTIONS = [["", "Doesn't repeat"], ["1d", "Every day"], ["3d", "Every 3 days"], ["7d", "Every week"], ["14d", "Every 2 weeks"], ["1m", "Every month"],
+  ...WEEKDAYS.map((w, i) => [w, "Every " + WEEKDAY_NAMES[i]]), ["custom", "Every … days"]];
+const repeatSelect = (cur, attr) => {
+  const r = normRepeat(cur), known = REPEAT_OPTIONS.some(o => o[0] === r);
+  return `<select class="sl-addin rep" ${attr}>${REPEAT_OPTIONS.map(([v, l]) => `<option value="${v}" ${(known ? r === v : v === "custom") ? "selected" : ""}>${l}</option>`).join("")}</select>
+    <input class="sl-addin num repdays" type="number" min="1" placeholder="days" value="${!known && r.endsWith("d") ? parseInt(r) : ""}" style="${known ? "display:none" : ""}">`;
+};
+function readRepeat(scope) {
+  const sel = scope.querySelector("select.rep"), days = scope.querySelector(".repdays");
+  if (!sel) return "";
+  if (sel.value === "custom") { const n = parseInt(days.value); return n > 0 ? n + "d" : ""; }
+  return sel.value;
+}
+function bindRepeat(scope) {
+  scope.querySelectorAll("select.rep").forEach(sel => sel.addEventListener("change", () => {
+    const d = sel.parentNode.querySelector(".repdays"); if (d) d.style.display = sel.value === "custom" ? "" : "none";
+  }));
+}
 function renderSideQuests() {
-  const open = sideQuests.filter(q => !q.done).sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999") || a.name.localeCompare(b.name));
-  const doneList = sideQuests.filter(q => q.done).sort((a, b) => b.done.localeCompare(a.done));
-  const recent = doneList.filter(q => q.done === TODAY);   // finished ones disappear the next day (kept for XP & Quest Library stats)
-  const row = q => {
-    const overdue = !q.done && q.due && q.due < TODAY;
-    const due = q.done ? `done ${M(q.done).format("MMM D")}` : q.due ? (q.due === TODAY ? "due today" : overdue ? `overdue ${-daysFrom(TODAY, q.due)}d` : `due ${M(q.due).format("MMM D")}`) : "";
-    return `<div class="sl-ms sl-sq ${q.done ? "done" : ""} ${overdue ? "overdue" : ""}">
-      <button class="sl-check" data-sq="${esc(q.path)}" title="${q.done ? "Mark not done" : "Complete"}">${q.done ? UI("check") : ""}</button>
-      <div class="sl-mstext"><div>${lnk(q.path, q.name)}</div>${noteLine(q.notes)}</div>
+  const open = sideQuests.filter(q => q.open).sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999") || a.name.localeCompare(b.name));
+  const recent = sideQuests.filter(q => q.doneToday);   // finished ones leave the list the next day (kept for XP & Quest Library stats)
+  const resting = sideQuests.filter(q => q.resting).sort((a, b) => a.next.localeCompare(b.next));
+  const row = (q, state) => {
+    const overdue = state === "open" && q.due && q.due < TODAY;
+    const due = state === "done" ? (q.repeat ? `done · back ${M(nextOccurrence(q.repeat, TODAY)).format("ddd MMM D")}` : "done today")
+      : state === "rest" ? `back ${M(q.next).format("ddd MMM D")}`
+      : q.due ? (q.due === TODAY ? "due today" : overdue ? `overdue ${-daysFrom(TODAY, q.due)}d` : `due ${M(q.due).format("MMM D")}`) : "";
+    return `<div class="sl-ms sl-sq ${state === "done" ? "done" : ""} ${state === "rest" ? "resting" : ""} ${overdue ? "overdue" : ""}">
+      <button class="sl-check" data-sq="${esc(q.path)}" title="${state === "done" ? "Mark not done" : "Complete"}" ${state === "rest" ? "disabled" : ""}>${state === "done" ? UI("check") : ""}</button>
+      <div class="sl-mstext"><div>${lnk(q.path, q.name)}${q.repeat ? ` <span class="sl-rep" title="Repeats">↻ ${esc(repeatLabel(q.repeat))}</span>` : ""}</div>${noteLine(q.notes)}</div>
       <span class="sl-due">${esc(due)}</span><span class="sl-msxp">+${q.xp}</span><span class="sl-ctrls">${edBtn(q.path)}${rmBtn("trash", q.path, "✕", "Delete side quest")}</span></div>`;
   };
   const avail = open.reduce((a, q) => a + q.xp, 0);
   const el = mount(win("SIDE QUESTS", `
-    ${open.length ? open.map(row).join("") : empty("No open side quests. Add errands and one-off tasks below.")}
-    ${recent.length ? `<div class="sl-chtitle">Done today — clears tomorrow</div>` + recent.map(row).join("") : ""}
+    ${open.length ? open.map(q => row(q, "open")).join("") : empty("No open side quests. Add errands and one-off tasks below.")}
+    ${recent.length ? `<div class="sl-chtitle">Done today — clears tomorrow</div>` + recent.map(q => row(q, "done")).join("") : ""}
+    ${!OPTS.compact && resting.length ? `<div class="sl-chtitle">Repeating — coming back</div>` + resting.map(q => row(q, "rest")).join("") : ""}
     <div class="sl-msadd sl-sqadd">
       <input class="sl-addin" data-f="name" placeholder="New side quest, e.g. Clean house, Call doctor">
       <input class="sl-addin num" data-f="xp" type="number" min="0" value="10" title="XP reward">
       <input class="sl-addin date" data-f="due" type="date" title="Due date (optional)">
+      <span class="sl-repwrap" title="Repeat">${repeatSelect("", "")}</span>
       <button class="sl-btn xs" data-addsq="1">＋ Add</button>
     </div>`, "", `${open.length} open · +${avail} XP available`));
+  bindRepeat(el);
   bind(el, "[data-sq]", async d => {
     const q = sideQuests.find(x => x.path === d.sq);
+    if (q.repeat) {
+      if (q.doneToday) {   // undo today's completion
+        await setFM(d.sq, fm => { fm.completions = toArr(fm.completions).map(dstr).filter(x => x && x !== TODAY); if (dstr(fm.done) === TODAY) fm.done = null; fm.next = null; });
+      } else {
+        const next = nextOccurrence(q.repeat, TODAY);
+        await setFM(d.sq, fm => { fm.completions = [...new Set(toArr(fm.completions).map(dstr).filter(Boolean).concat([TODAY]))].sort(); fm.done = null; fm.next = next; fm.due = next; });
+        toast(`Side quest complete: ${q.name}. +${q.xp} XP — it comes back ${M(next).format("dddd, MMM D")}.`, "good");
+      }
+      return;
+    }
     await setFM(d.sq, fm => { fm.done = q.done ? null : TODAY; });
     if (!q.done) toast(`Side quest complete: ${q.name}. +${q.xp} XP`, "good");
   });
@@ -790,10 +884,10 @@ function renderSideQuests() {
     if (!name) return toast("Name the side quest first", "bad");
     let path = P(`07 Side Quests/${name}.md`), n = 2;
     while (app.vault.getAbstractFileByPath(path)) path = P(`07 Side Quests/${name} (${n++}).md`);
-    const xp = parseFloat(val("xp")), due = val("due");
+    const xp = parseFloat(val("xp")), due = val("due"), rep = readRepeat(box);
     await ensureFolder(P("07 Side Quests"));
-    await app.vault.create(path, `---\ntype: sidequest\nxp: ${isFinite(xp) ? xp : 10}\ndue: ${due || ""}\ndone:\ncreated: ${TODAY}\n---\n`);
-    toast(`Side quest added: ${name}`, "good");
+    await app.vault.create(path, `---\ntype: sidequest\nxp: ${isFinite(xp) ? xp : 10}\ndue: ${due || ""}\nrepeat: ${rep}\ndone:\ncreated: ${TODAY}\n---\n`);
+    toast(`Side quest added: ${name}${rep ? " (" + repeatLabel(rep) + ")" : ""}`, "good");
   };
   box.querySelector("[data-addsq]").addEventListener("click", ev => { ev.preventDefault(); add(); });
   box.querySelector('[data-f="name"]').addEventListener("keydown", ev => { if (ev.key === "Enter") { ev.preventDefault(); add(); } });
@@ -1284,7 +1378,7 @@ function questCard(q, removable) {
   </div>`;
 }
 function renderQuests() {
-  const act = quests.filter(isActive).sort((a, b) => (a.deadline || "9999").localeCompare(b.deadline || "9999"));
+  const act = quests.filter(isActive).sort(questOrder);
   const other = quests.filter(q => !isActive(q) && q.status !== "completed");
   mount(win("ACTIVE QUESTS", (act.length ? act.map(q => questCard(q, true)).join("") : empty("No active quests yet — every quest needs measurable milestones.")) + `<div class="sl-addrow">${addBox("quest")}</div>`, "", `${act.length} active`));
   if (other.length) mount(win("DORMANT / ABANDONED", other.map(q => `<div class="sl-feedrow"><span class="sl-fd">${esc(q.status)}</span><span class="sl-fm">${lnk(q.path, q.name)} <span class="sl-meta">${Math.round(q.pct * 100)}%</span></span><button class="sl-btn xs ghost" data-restore="quest" data-p="${esc(q.path)}">Restore</button>${rmBtn("trash", q.path, "Delete", "Delete forever (moves to .trash)")}</div>`).join("")));
@@ -1319,7 +1413,7 @@ function renderGoal() {
 // Dashboard window: every active quest's milestones — log progress, tick them off, add new ones.
 function renderMilestones() {
   const RANKS = ["S", "A", "B", "C", "D", "E"];
-  const act = quests.filter(isActive).sort((a, b) => RANKS.indexOf(a.rank) - RANKS.indexOf(b.rank) || (a.deadline || "9999").localeCompare(b.deadline || "9999"));
+  const act = quests.filter(isActive).sort(questOrder);   // same order as the Quests list; milestones keep the order they have in the quest
   const showDone = !!OPTS.showDone;
   const blocks = act.map((q, i) => {
     const open = q.ms.filter(m => !m.done), done = q.ms.length - open.length;
@@ -1509,15 +1603,18 @@ function renderQuestStats() {
 }
 // ---- Quest Library: side-quest stats (including finished ones that left the list)
 function renderSideStats() {
-  const done = sideQuests.filter(q => q.done).sort((a, b) => b.done.localeCompare(a.done));
-  const open = sideQuests.filter(q => !q.done);
-  const xp = done.reduce((a, q) => a + q.xp, 0);
-  const last30 = done.filter(q => q.done > M().subtract(30, "days").format("YYYY-MM-DD")).length;
+  const done = sideQuests.flatMap(q => q.doneDates.map(d => ({ q, d }))).sort((a, b) => b.d.localeCompare(a.d));
+  const open = sideQuests.filter(q => q.open);
+  const xp = done.reduce((a, x) => a + x.q.xp, 0);
+  const last30 = done.filter(x => x.d > M().subtract(30, "days").format("YYYY-MM-DD")).length;
   const overdue = open.filter(q => q.due && q.due < TODAY).length;
-  const onTime = done.filter(q => q.due).length ? Math.round(pctOf(done.filter(q => q.due && q.done <= q.due).length, done.filter(q => q.due).length)) + "%" : "—";
-  const rows = done.slice(0, 25).map(q => `<div class="sl-feedrow k-side"><span class="sl-fd">${M(q.done).format("MMM D")}</span><span class="sl-fm">${lnk(q.path, q.name)}${q.due ? ` <span class="sl-meta">· due ${M(q.due).format("MMM D")}${q.done > q.due ? " (late)" : ""}</span>` : ""}</span><span class="sl-fv">+${q.xp}</span>${edBtn(q.path)}${rmBtn("trash", q.path, "✕", "Delete (removes its XP)")}</div>`).join("");
+  const dated = done.filter(x => !x.q.repeat && x.q.due);
+  const onTime = dated.length ? Math.round(pctOf(dated.filter(x => x.d <= x.q.due).length, dated.length)) + "%" : "—";
+  const rows = done.slice(0, 25).map(({ q, d }) => `<div class="sl-feedrow k-side"><span class="sl-fd">${M(d).format("MMM D")}</span><span class="sl-fm">${lnk(q.path, q.name)}${q.repeat ? ` <span class="sl-rep">↻ ${esc(repeatLabel(q.repeat))}</span>` : q.due ? ` <span class="sl-meta">· due ${M(q.due).format("MMM D")}${d > q.due ? " (late)" : ""}</span>` : ""}</span><span class="sl-fv">+${q.xp}</span>${edBtn(q.path)}</div>`).join("");
+  const reps = sideQuests.filter(q => q.repeat);
   mount(win("SIDE QUESTS", `<div class="sl-chips">${chip("Completed", done.length, "gold")}${chip("Last 30 days", last30)}${chip("XP earned", "+" + fmt(xp), "pos")}${chip("Open", open.length)}${chip("Overdue", overdue, overdue ? "neg" : "")}${chip("On time", onTime)}</div>
-    <div class="sl-chtitle">Side quests completed per week</div>${weeklyBars(done.map(q => q.done))}
+    <div class="sl-chtitle">Side quests completed per week</div>${weeklyBars(done.map(x => x.d))}
+    ${reps.length ? `<div class="sl-chtitle">Repeating side quests</div>` + reps.map(q => `<div class="sl-feedrow k-side"><span class="sl-fd">${q.completions.length}×</span><span class="sl-fm">${lnk(q.path, q.name)} <span class="sl-rep">↻ ${esc(repeatLabel(q.repeat))}</span></span><span class="sl-meta">${q.resting ? "back " + M(q.next).format("MMM D") : q.open ? "open now" : "done today"}</span>${edBtn(q.path)}</div>`).join("") : ""}
     <div class="sl-chtitle">Completed side quests</div>${rows || empty("Nothing completed yet. Finished side quests are kept here after they leave the list.")}`));
 }
 

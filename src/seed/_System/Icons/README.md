@@ -1,1 +1,0 @@
-Drop images here named after an interface icon (star, check, cross, undo, shield, fire, trophy, gift, lock, sword, skull, spark, scroll, crystal, prophecy, warn, rank-e … rank-s, rank-n) to replace it everywhere. See [[Icon Forge]].

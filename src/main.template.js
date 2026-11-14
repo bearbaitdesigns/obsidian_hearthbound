@@ -205,7 +205,7 @@ const TABS = [
     ["adventure", "Adventure So Far", ["overview", "charts", { section: "chart", days: 30 }]],
     ["hall", "Hall of Triumph", ["hall"]],
   ]],
-  ["profile", "Profile", ["character", "areas", "icons"]],
+  ["profile", "Profile", ["character", "areas"]],
   ["guide", "Guide", []],
 ];
 const RECORD_SECTION = { habit: "habit", goal: "goal", quest: "goal", reward: "reward", area: "area" };
