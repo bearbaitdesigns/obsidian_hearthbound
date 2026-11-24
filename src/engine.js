@@ -116,7 +116,7 @@ const ALL = (ROOT ? dv.pages(`"${ROOT}"`) : dv.pages()).where(p => !p.file.path.
 const profile = ALL.where(p => p.type === "profile").first() || {};
 const CFG = {
   base: num(profile.level_base_xp, 100), step: num(profile.level_step_xp, 50),
-  dqBonus: num(profile.daily_quest_bonus, 25),
+  dqBonus: num(profile.daily_quest_bonus, 25), statStep: Math.max(1, num(profile.stat_xp_per_point, 50)),
   name: profile.player_name || "Player", job: profile.job_class || null,
   title: profile.title || null, avatar: profile.character || profile.avatar || null,
   profilePath: profile.file ? profile.file.path : null,
@@ -131,6 +131,7 @@ const habits = ALL.where(p => p.type === "habit").array().map(p => ({
   polarity: String(p.polarity || "good").toLowerCase() === "bad" ? "bad" : "good",
   xp: num(p.xp, 10), area: p.area ? nameOf(p.area) : "", icon: p.icon || "",
   dq: p.daily_quest === true, active: p.active !== false, cover: p.cover, cue: p.cue || "", notes: p.notes || "",
+  quest: p.quest ? nameOf(p.quest) : "", questAmount: num(p.quest_amount, 1),   // completing it adds progress to that quest's current milestone
   history: toArr(p.history).map(dstr).filter(Boolean),
 })).sort((a, b) => (b.dq - a.dq) || (b.xp - a.xp) || a.name.localeCompare(b.name));
 const H = Object.fromEntries(habits.map(h => [h.key, h]));
@@ -292,6 +293,21 @@ const gold = totalXP - spent;
 const xpOn = d => events.filter(e => e.date === d).reduce((a, e) => a + e.xp, 0);
 const areaXP = {};
 for (const e of events) if (e.area) areaXP[norm(e.area)] = (areaXP[norm(e.area)] || 0) + e.xp;
+// Stats: 10 + 1 point per `stat_xp_per_point` XP (default 50) earned in that life area
+const statVal = x => 10 + Math.floor(Math.max(0, x) / CFG.statStep);
+const statInto = x => Math.max(0, x) % CFG.statStep;
+const statToNext = x => CFG.statStep - statInto(x);
+const statPct = x => pctOf(statInto(x), CFG.statStep);
+// "+1 STR!" when a stat rises since the last time the Codex was drawn (this session)
+{
+  const prev = window.__slStatCache || null, now = {};
+  for (const a of areas) now[a.key] = statVal(areaXP[a.key] || 0);
+  if (prev) for (const a of areas) if (prev[a.key] != null && now[a.key] > prev[a.key] && !window.__slStatToasted?.[a.key + now[a.key]]) {
+    (window.__slStatToasted ||= {})[a.key + now[a.key]] = 1;
+    setTimeout(() => toast(`+${now[a.key] - prev[a.key]} ${a.stat}! ${a.name} is now ${a.stat} ${now[a.key]}.`, "gold"), 50);
+  }
+  window.__slStatCache = now;
+}
 
 function levelInfo(xp) {
   let lvl = 1, need = CFG.base, rem = Math.max(0, xp);
@@ -398,7 +414,40 @@ async function toggleHabit(date, h) {
     if (i >= 0) arr.splice(i, 1); else { arr.push(date); added = true; }
     fm.history = [...new Set(arr)].sort();
   });
+  // a habit linked to a quest feeds that quest's current milestone (and takes it back on undo)
+  if (h.quest && h.polarity === "good") {
+    const q = quests.find(x => norm(x.name) === norm(h.quest) && isActive(x));
+    if (q) { try { await feedQuest(q, added ? h.questAmount : -h.questAmount, h.name); } catch (e) { console.warn(e); } }
+  }
   return added;
+}
+// When milestone `m` (index i) of quest q has just been reached, hand progress to the next one.
+async function carryOver(q, i, r) {
+  const m = q.ms[i], next = q.ms.slice(i + 1).find(x => !x.done && x.target != null);
+  if (!next) return null;
+  if ((next.unit || "") === (m.unit || "") && next.target > m.target) { if (r.cur > next.cur) await updateMilestone(q.path, next.line, "set", r.cur); }
+  else { const over = +(r.cur - r.target).toFixed(2); if (over > 0) await updateMilestone(q.path, next.line, "add", over); }
+  return next;
+}
+// Adds `amt` to the quest's current milestone. When that milestone is reached, the next one takes over:
+// cumulative milestones (same unit, bigger target — e.g. 2 books → 4 books) continue from the total,
+// otherwise any extra progress carries over.
+async function feedQuest(q, amt, from) {
+  const ms = q.ms;
+  if (!ms.length || !amt) return;
+  if (amt > 0) {
+    const i = ms.findIndex(m => !m.done && m.target != null);
+    if (i < 0) return;
+    const m = ms[i], r = await updateMilestone(q.path, m.line, "add", amt);
+    if (r.done && !r.wasDone) {
+      const next = await carryOver(q, i, r);
+      toast(`${from ? from + " completed a milestone: " : "Milestone reached: "}${m.text}!${next ? " Next: " + next.text : " Every milestone is done — claim your victory!"}`, "gold");
+    } else toast(`${from || "Progress"} → ${q.name}: +${fmt(amt)}${m.unit ? " " + m.unit : ""} (${fmt(r.cur)}/${fmt(r.target)})`, "good");
+  } else {
+    const cur = ms.find(m => !m.done && m.target != null);
+    if (cur && cur.cur >= -amt) await updateMilestone(q.path, cur.line, "add", amt);
+    else { const last = [...ms].reverse().find(m => m.done && m.target != null); if (last) await updateMilestone(q.path, last.line, "add", amt); }
+  }
 }
 async function updateMilestone(path, line, mode, val) {
   const f = app.vault.getAbstractFileByPath(path);
@@ -461,7 +510,7 @@ async function openPath(path) {
   const f = app.vault.getAbstractFileByPath(path);
   if (f) await app.workspace.getLeaf(true).openFile(f);
 }
-async function createFromTemplate(kind, rawName) {
+async function createFromTemplate(kind, rawName, areaName) {
   const map = {
     good: ["Good Habit.md", FOLDERS.good], bad: ["Bad Habit.md", FOLDERS.bad],
     quest: ["Quest.md", FOLDERS.quest], reward: ["Reward.md", FOLDERS.reward],
@@ -475,6 +524,7 @@ async function createFromTemplate(kind, rawName) {
   if (!app.vault.getAbstractFileByPath(path)) {
     await ensureFolder(folder);
     await app.vault.create(path, fillTemplate(await readTemplate(tpl), { date: TODAY, title: name }));
+    if (areaName && kind !== "reward") await setFM(path, fm => { fm.area = `[[${areaName}]]`; });
   }
   setTimeout(() => openEditor(path), 60);
   return path;
@@ -502,6 +552,7 @@ const areaTag = name => {
   const a = areas.find(x => x.key === norm(name));
   return a && a.stat && a.stat !== "—" ? `${esc(a.stat)}🔹${esc(a.name)}` : esc(name);
 };
+const noAreaTag = () => `<span class="sl-noarea" title="No life area — its XP doesn't raise a stat. Set one in ✎.">⚠ no area</span>`;
 const noteLine = n => n ? `<div class="sl-note">${esc(n)}</div>` : "";
 const rmBtn = (kind, path, label = "✕", title = "Remove") => `<button class="sl-x" data-rm="${kind}" data-p="${esc(path)}" title="${esc(title)}">${label}</button>`;
 function bindRemove(el) {
@@ -523,11 +574,13 @@ function bindRemove(el) {
 }
 // "+ Add" box for window title bars
 const ADD_LABEL = { good: "good habit", bad: "bad habit", quest: "quest", reward: "reward", vision: "vision board" };
-const addBox = kind => `<span class="sl-add"><input class="sl-addin" data-addin="${kind}" placeholder="New ${ADD_LABEL[kind]}…"><button class="sl-btn xs" data-add="${kind}">＋ Add</button></span>`;
+const areaSelect = (attr, cur = "") => areas.length ? `<select class="sl-addin sl-areasel" ${attr} title="Life area — its XP raises that stat"><option value="">No area</option>${areas.map(a => `<option value="${esc(a.name)}" ${norm(cur) === a.key ? "selected" : ""}>${esc(a.stat)}🔹${esc(a.name)}</option>`).join("")}</select>` : "";
+const addBox = kind => `<span class="sl-add"><input class="sl-addin" data-addin="${kind}" placeholder="New ${ADD_LABEL[kind]}…">${kind === "reward" ? "" : areaSelect(`data-addarea="${kind}"`)}<button class="sl-btn xs" data-add="${kind}">＋ Add</button></span>`;
 function bindAdd(el) {
   const go = async kind => {
     const inp = el.querySelector(`[data-addin="${kind}"]`);
-    try { await createFromTemplate(kind, inp.value); toast(`New ${ADD_LABEL[kind]} created: ${inp.value}.`, "good"); inp.value = ""; }
+    const sel = el.querySelector(`[data-addarea="${kind}"]`);
+    try { await createFromTemplate(kind, inp.value, sel ? sel.value : ""); toast(`New ${ADD_LABEL[kind]} created: ${inp.value}.`, "good"); inp.value = ""; }
     catch (e) { toast("⚠ " + e.message, "bad"); }
   };
   el.querySelectorAll("[data-add]").forEach(b => b.addEventListener("click", ev => { ev.preventDefault(); go(b.dataset.add); }));
@@ -614,7 +667,7 @@ function bindIconEdits(el) {
 
 // ---- Card editor pop-ups: XP, notes, cover image, icon, name and the settings of each kind of card
 const EDIT_FIELDS = {
-  habit: [["xp", "number", "XP"], ["area", "area", "Life area"], ["daily_quest", "bool", "Part of the Daily Quest ★"], ["cue", "text", "Definition of done"]],
+  habit: [["xp", "number", "XP"], ["area", "area", "Life area"], ["daily_quest", "bool", "Part of the Daily Quest ★"], ["quest", "questsel", "Counts toward quest"], ["quest_amount", "number", "Progress added each time (in the milestone's unit)"], ["cue", "text", "Definition of done"]],
   reward: [["cost", "number", "Cost (XP)"], ["repeatable", "bool", "Can be claimed again"], ["min_level", "number", "Unlocks at level"]],
   area: [["stat", "text", "Stat (e.g. STR, WIS)"], ["class", "text", "Class when this is your strongest stat (e.g. Ranger)"], ["description", "text", "Description"]],
   goal: [["rank", "select:E,D,C,B,A,S", "Rank"], ["xp_reward", "number", "XP for clearing the quest"], ["area", "area", "Life area"], ["deadline", "date", "Deadline"], ["victory", "text", "Victory condition"]],
@@ -623,7 +676,7 @@ const EDIT_FIELDS = {
   "future-self": [["horizon", "text", "Horizon (e.g. 5 years)"], ["__body", "body", "Write-up"]],
   profile: [["player_name", "text", "Player name"], ["job_class", "text", "Job (empty = earned automatically)"], ["title", "text", "Title (empty = earned automatically)"],
     ["banner", "image", "Banner image"], ["banner_title", "text", "Banner title"], ["banner_subtitle", "text", "Banner subtitle"],
-    ["level_base_xp", "number", "XP for level 2"], ["level_step_xp", "number", "Extra XP per further level"], ["daily_quest_bonus", "number", "Daily Quest bonus XP"],
+    ["level_base_xp", "number", "XP for level 2"], ["level_step_xp", "number", "Extra XP per further level"], ["daily_quest_bonus", "number", "Daily Quest bonus XP"], ["stat_xp_per_point", "number", "XP for +1 stat point (default 50)"],
     ["focus", "focus", "Stats you most want to improve (up to 3)"], ["hp_max", "number", "Max HP"], ["hp_regen", "number", "HP regenerated per day"], ["hp_heal_per_habit", "number", "HP healed per good habit"]],
 };
 EDIT_FIELDS.quest = EDIT_FIELDS.goal; EDIT_FIELDS.vision = EDIT_FIELDS["vision-board"];
@@ -707,6 +760,7 @@ async function openEditor(path) {
     else if (kind === "number") ctl = `<input class="sl-addin" type="number" step="any" data-k="${k}" value="${esc(val(v))}">`;
     else if (kind === "date") ctl = `<input class="sl-addin date" type="date" data-k="${k}" value="${esc(dstr(v) || "")}">`;
     else if (kind === "area") ctl = `<select class="sl-addin" data-k="${k}"><option value="">—</option>${areas.map(a => `<option ${norm(v) === a.key ? "selected" : ""}>${esc(a.name)}</option>`).join("")}</select>`;
+    else if (kind === "questsel") ctl = `<select class="sl-addin" data-k="${k}"><option value="">— none —</option>${quests.filter(isActive).map(q => `<option ${norm(v) === norm(q.name) ? "selected" : ""}>${esc(q.name)}</option>`).join("")}</select>`;
     else if (kind === "focus") ctl = focusPicker(toArr(v).map(norm));
     else if (kind === "repeat") ctl = `<div class="sl-edinline">${repeatSelect(v, `data-k="${k}"`)}</div>`;
     else if (kind === "body") ctl = `<textarea class="sl-addin sl-edbody" rows="10" data-k="${k}">${esc(bodyText)}</textarea>`;
@@ -785,7 +839,7 @@ async function openEditor(path) {
         if (kind === "focus") { values[k] = readFocus(i); return; }
         if (kind === "bool") values[k] = i.checked;
         else if (kind === "number") values[k] = i.value === "" ? null : +i.value;
-        else if (kind === "area") values[k] = i.value ? `[[${i.value}]]` : null;
+        else if (kind === "area" || kind === "questsel") values[k] = i.value ? `[[${i.value}]]` : null;
         else values[k] = i.value === "" ? null : i.value;
       });
       const notesEl = el.querySelector("[data-notes]"), notes = notesEl ? notesEl.value.trim() : null;
@@ -912,7 +966,7 @@ function renderSideQuests() {
       : q.due ? (q.due === TODAY ? "due today" : overdue ? `overdue ${-daysFrom(TODAY, q.due)}d` : `due ${M(q.due).format("MMM D")}`) : "";
     return `<div class="sl-ms sl-sq ${state === "done" ? "done" : ""} ${state === "rest" ? "resting" : ""} ${overdue ? "overdue" : ""}">
       <button class="sl-check" data-sq="${esc(q.path)}" title="${state === "done" ? "Mark not done" : "Complete"}" ${state === "rest" ? "disabled" : ""}>${state === "done" ? UI("check") : ""}</button>
-      <div class="sl-mstext"><div>${lnk(q.path, q.name)}${q.repeat ? ` <span class="sl-rep" title="Repeats">↻ ${esc(repeatLabel(q.repeat))}</span>` : ""}</div>${noteLine(q.notes)}</div>
+      <div class="sl-mstext"><div>${lnk(q.path, q.name)}${q.area ? "" : " " + noAreaTag()}${q.repeat ? ` <span class="sl-rep" title="Repeats">↻ ${esc(repeatLabel(q.repeat))}</span>` : ""}</div>${noteLine(q.notes)}</div>
       <span class="sl-due">${esc(due)}</span><span class="sl-msxp">+${q.xp}</span><span class="sl-ctrls">${rmBtn("trash", q.path, "✕", "Delete side quest")}${edBtn(q.path)}</span></div>`;
   };
   const avail = open.reduce((a, q) => a + q.xp, 0);
@@ -925,6 +979,7 @@ function renderSideQuests() {
       <input class="sl-addin num" data-f="xp" type="number" min="0" value="10" title="XP reward">
       <input class="sl-addin date" data-f="due" type="date" title="Due date (optional)">
       <span class="sl-repwrap" title="Repeat">${repeatSelect("", "")}</span>
+      ${areaSelect('data-f="area"')}
       <button class="sl-btn xs" data-addsq="1">＋ Add</button>
     </div>`, "", `${open.length} open · +${avail} XP available`));
   bindRepeat(el);
@@ -952,7 +1007,8 @@ function renderSideQuests() {
     while (app.vault.getAbstractFileByPath(path)) path = P(`07 Side Quests/${name} (${n++}).md`);
     const xp = parseFloat(val("xp")), due = val("due"), rep = readRepeat(box);
     await ensureFolder(P("07 Side Quests"));
-    await app.vault.create(path, `---\ntype: sidequest\nxp: ${isFinite(xp) ? xp : 10}\ndue: ${due || ""}\nrepeat: ${rep}\ndone:\ncreated: ${TODAY}\n---\n`);
+    const ar = box.querySelector('[data-f="area"]'), areaLine = ar && ar.value ? `"[[${ar.value}]]"` : "";
+    await app.vault.create(path, `---\ntype: sidequest\nxp: ${isFinite(xp) ? xp : 10}\ndue: ${due || ""}\nrepeat: ${rep}\narea: ${areaLine}\ndone:\ncreated: ${TODAY}\n---\n`);
     toast(`Side quest added: ${name}${rep ? " (" + repeatLabel(rep) + ")" : ""}`, "good");
   };
   box.querySelector("[data-addsq]").addEventListener("click", ev => { ev.preventDefault(); add(); });
@@ -991,7 +1047,7 @@ function renderStatus() {
   const av = imgSrc(CFG.avatar);
   const stats = areas.map(a => {
     const x = areaXP[a.key] || 0;
-    return `<div class="sl-stat ${FOCUS.has(a.key) ? "focus" : ""}" ${FOCUS.has(a.key) ? 'title="Focus stat"' : ""}><span class="sl-stat-k">${ico(a.icon, "", "sm")} ${esc(a.stat)}</span><span class="sl-stat-v">${10 + Math.floor(Math.max(0, x) / 100)}</span><span class="sl-stat-n">${esc(a.name)}</span></div>`;
+    return `<div class="sl-stat ${FOCUS.has(a.key) ? "focus" : ""}" ${FOCUS.has(a.key) ? 'title="Focus stat"' : ""}><span class="sl-stat-k">${ico(a.icon, "", "sm")} ${esc(a.stat)}</span><span class="sl-stat-v">${statVal(x)}</span><span class="sl-stat-n">${esc(a.name)} · +1 in ${fmt(statToNext(x))} XP</span><div class="sl-stat-bar">${bar(statPct(x), "xp")}</div></div>`;
   }).join("");
   const body = `
   <div class="sl-status">
@@ -1051,7 +1107,7 @@ function renderBanner() {
 
 function renderCharacter() {
   const rank = hunterRank(LV.lvl);
-  const stats = areas.map(a => { const x = Math.max(0, areaXP[a.key] || 0); return `<div class="sl-csrow ${FOCUS.has(a.key) ? "focus" : ""}"><span>${ico(a.icon, "", "sm")} ${esc(a.stat)}</span><em>${esc(a.name)}${FOCUS.has(a.key) ? " ★ focus" : ""}</em><b>${10 + Math.floor(x / 100)}</b></div>`; }).join("");
+  const stats = areas.map(a => { const x = Math.max(0, areaXP[a.key] || 0); return `<div class="sl-csrow ${FOCUS.has(a.key) ? "focus" : ""}"><span>${ico(a.icon, "", "sm")} ${esc(a.stat)}</span><em>${esc(a.name)}${FOCUS.has(a.key) ? " ★ focus" : ""}</em><b>${statVal(x)}</b><small class="sl-meta">+1 in ${fmt(statToNext(x))} XP</small></div>`; }).join("");
   mount(win("CHARACTER", `<div class="sl-charsheet">
     ${portrait("sl-bigportrait", imgSrc(CFG.avatar), rank)}
     <div class="sl-charinfo">
@@ -1080,7 +1136,7 @@ function renderAdvice() {
   const recentXP = {};
   for (const e of events) if (e.area && e.date && e.date > since) recentXP[norm(e.area)] = (recentXP[norm(e.area)] || 0) + e.xp;
   const ranked = areas.map(a => ({ a, x: Math.max(0, areaXP[a.key] || 0), r: recentXP[a.key] || 0 }))
-    .map(o => Object.assign(o, { v: 10 + Math.floor(o.x / 100) }))
+    .map(o => Object.assign(o, { v: statVal(o.x) }))
     .sort((p, q) => p.v - q.v || p.r - q.r || p.x - q.x);
   const focusRanked = ranked.filter(o => FOCUS.has(o.a.key));
   const weak = focusRanked[0] || ranked[0], a = weak.a, overall = ranked[0];
@@ -1097,7 +1153,7 @@ function renderAdvice() {
   if (!good.length) tips.push(`You have no good habits in ${esc(a.name)} yet — add one below and set its life area to ${esc(a.name)}.`);
   if (!qs.length) tips.push(`Start a quest in ${esc(a.name)} so milestones feed this stat.`);
   const general = STAT_TIPS[String(a.stat).toUpperCase()] || ["Add a small daily habit in this area.", "Set a quest with measurable milestones for it.", "Add a repeating side quest so it shows up every week."];
-  const bars = ranked.map(o => `<div class="sl-hrow"><span class="hn">${FOCUS.has(o.a.key) ? "★ " : ""}${esc(o.a.stat)}🔹${esc(o.a.name)}</span>${bar(Math.min(100, (o.x % 100)), o === weak ? "hp" : "xp")}<em>${o.v} · ${o.r >= 0 ? "+" : ""}${o.r} XP/30d</em></div>`).join("");
+  const bars = ranked.map(o => `<div class="sl-hrow"><span class="hn">${FOCUS.has(o.a.key) ? "★ " : ""}${esc(o.a.stat)}🔹${esc(o.a.name)}</span>${bar(statPct(o.x), o === weak ? "hp" : "xp")}<em>${o.v} · ${o.r >= 0 ? "+" : ""}${o.r} XP/30d</em></div>`).join("");
   const focusNote = focusRanked.length
     ? `<div class="sl-meta" style="margin-bottom:10px">Your focus: ${focusRanked.map(o => `${esc(o.a.stat)}🔹${esc(o.a.name)}`).join(", ")}. Showing the weakest of them.${overall !== weak ? ` Your weakest stat overall is ${esc(overall.a.stat)}🔹${esc(overall.a.name)} (${overall.v}).` : ""}</div>`
     : `<div class="sl-meta" style="margin-bottom:10px">Tip: choose focus stats in ✎ Edit profile &amp; settings and this window will help with those first.</div>`;
@@ -1148,10 +1204,11 @@ function renderGenerator() {
       ? `<div class="sl-rollname">${esc(r.idea[0])}</div><div class="sl-meta">${tag} · side quest · +${r.idea[1]} XP · due in 2 days</div>`
       : `<div class="sl-rollname">${rankBadge(r.idea[1])} ${esc(r.idea[0])}</div><div class="sl-meta">${tag} · main quest · +${RANK_XP[r.idea[1]] || 200} XP when cleared</div>
          <ul class="sl-tips">${r.idea[2].map(m => `<li>${esc(m[0])} <span class="sl-meta">(${m[1]} ${esc(m[2])})</span></li>`).join("")}</ul>`;
-    body.innerHTML = `<div class="sl-wtitle"><span>${esc(tcase("QUEST GENERATOR"))}</span></div>
+    body.innerHTML = `<details class="sl-gen" ${window.__slGenOpen ? "open" : ""}><summary class="sl-wtitle"><span>🎲 ${esc(tcase("QUEST GENERATOR"))}</span><span class="sl-meta">${window.__slGenOpen ? "hide" : "need an idea? roll a random quest"}</span></summary>
       <div class="sl-tabs"><button class="sl-tab ${r.kind === "side" ? "on" : ""}" data-gk="side">Side quest</button><button class="sl-tab ${r.kind === "main" ? "on" : ""}" data-gk="main">Main quest</button></div>
       <div class="sl-roll"><div class="sl-dice">🎲</div><div>${detail}</div></div>
-      <div class="sl-actions"><button class="sl-btn" data-g="accept">✔ Accept quest</button><button class="sl-btn ghost" data-g="reroll">🎲 Roll again</button></div>`;
+      <div class="sl-actions"><button class="sl-btn" data-g="accept">✔ Accept quest</button><button class="sl-btn ghost" data-g="reroll">🎲 Roll again</button></div></details>`;
+    body.querySelector("details.sl-gen").addEventListener("toggle", ev => { window.__slGenOpen = ev.target.open; ev.target.querySelector("summary .sl-meta").textContent = ev.target.open ? "hide" : "need an idea? roll a random quest"; });
     body.querySelectorAll("[data-gk]").forEach(b => b.addEventListener("click", () => { window.__slRoll = rollQuest(b.dataset.gk); draw(); }));
     body.querySelector('[data-g="reroll"]').addEventListener("click", () => { window.__slRoll = rollQuest(window.__slRoll.kind); draw(); });
     body.querySelector('[data-g="accept"]').addEventListener("click", async () => {
@@ -1200,15 +1257,16 @@ function renderTime() {
 
 function renderActions() {
   if (OPTS.compact) {
-    const el = mount(`<div class="sl-toolbar"><span class="sl-tbl">${UI("spark")} QUICK ADD</span><input class="sl-input sl-tbin" type="text" placeholder="Name…">
+    const el = mount(`<div class="sl-toolbar"><span class="sl-tbl">${UI("spark")} QUICK ADD</span><input class="sl-input sl-tbin" type="text" placeholder="Name…">${areaSelect('data-qa="area"')}
       <button class="sl-btn xs" data-kind="good">＋ Good habit</button><button class="sl-btn xs red" data-kind="bad">＋ Bad habit</button>
       <button class="sl-btn xs" data-kind="quest">＋ Quest</button><button class="sl-btn xs gold" data-kind="reward">＋ Reward</button></div>`);
     const input = el.querySelector(".sl-tbin");
-    bind(el, "[data-kind]", async d => { await createFromTemplate(d.kind, input.value); input.value = ""; });
+    bind(el, "[data-kind]", async d => { const sel = el.querySelector('[data-qa="area"]'); await createFromTemplate(d.kind, input.value, sel ? sel.value : ""); input.value = ""; });
     return;
   }
   const body = `
     <input class="sl-input" type="text" placeholder="Name it… e.g. Cold Shower, Learn Spanish">
+    <div class="sl-qarow"><span class="sl-meta">Life area</span>${areaSelect('data-qa="area"')}<span class="sl-meta">— its XP raises that stat</span></div>
     <div class="sl-actions">
       <button class="sl-btn" data-kind="good">＋ Good Habit</button>
       <button class="sl-btn red" data-kind="bad">＋ Bad Habit</button>
@@ -1219,7 +1277,7 @@ function renderActions() {
 `;
   const el = mount(win("QUICK ACTIONS", body));
   const input = el.querySelector(".sl-input");
-  bind(el, "[data-kind]", async d => { await createFromTemplate(d.kind, input.value); input.value = ""; });
+  bind(el, "[data-kind]", async d => { const sel = el.querySelector('[data-qa="area"]'); await createFromTemplate(d.kind, input.value, sel ? sel.value : ""); input.value = ""; });
 }
 
 function habitCards(date, pol) {
@@ -1229,7 +1287,7 @@ function habitCards(date, pol) {
   if (!list.length) return { html: empty(pol === "good" ? "No good habits yet — add one in Quick Actions." : "No bad habits tracked. Nice."), list, doneSet };
   const html = `<div class="sl-cards">` + list.map(h => {
     const done = doneSet.has(h.key);
-    const area = h.area ? `<div class="sl-meta sl-areatag">${areaTag(h.area)}</div>` : "";
+    const area = `<div class="sl-meta sl-areatag">${h.area ? areaTag(h.area) : noAreaTag()}</div>` + (h.quest ? `<div class="sl-meta sl-feeds" title="Completing this adds progress to the quest's current milestone">↳ ${esc(h.quest)} +${fmt(h.questAmount)}</div>` : "");
     if (pol === "good") return `
       <div class="sl-card ${done ? "is-done" : ""}">${edBtn(h.path)}
         ${art(h, "spark")}
@@ -1522,8 +1580,8 @@ function renderAreas() {
     const nq = quests.filter(q => norm(q.area) === a.key && isActive(q)).length;
     return `<div class="sl-card area">${edBtn(a.path)}${art(a, "spark")}<div class="sl-card-body">
       <div class="sl-card-name">${lnk(a.path, a.name)}</div>
-      <div class="sl-meta"><b>${esc(a.stat)} ${10 + Math.floor(x / 100)}</b> · ${nq} active quest${nq === 1 ? "" : "s"}</div>
-      <div class="sl-mono">All-time XP earned: ${fmt(x)}</div>${bar(x % 100, "xp")}</div></div>`;
+      <div class="sl-meta"><b>${esc(a.stat)} ${statVal(x)}</b> · ${nq} active quest${nq === 1 ? "" : "s"}</div>
+      <div class="sl-mono">All-time XP earned: ${fmt(x)}</div>${bar(statPct(x), "xp")}<div class="sl-meta">+1 ${esc(a.stat)} in ${fmt(statToNext(x))} XP</div></div></div>`;
   }).join("")}</div>`));
 }
 
@@ -1540,10 +1598,15 @@ function msRow(m, q, compact) {
     <div class="sl-mstext"><div>${esc(m.text)}${compact && q ? ` <span class="sl-meta">· ${lnk(q.path, q.name)}</span>` : ""}</div>${m.target != null ? bar(m.pct * 100, "ms") : ""}</div>
     ${prog}<span class="sl-due">${esc(dueTxt)}</span>${m.xp ? `<span class="sl-msxp">+${m.xp}</span>` : ""}<span class="sl-ctrls">${ctrls}<button class="sl-ed" data-msedit="${m.line}" data-p="${esc(m.path)}" title="Edit milestone">✎</button></span></div>`;
 }
+async function reached(path, line, r) {
+  const q = quests.find(x => x.path === path), i = q ? q.ms.findIndex(m => m.line === line) : -1;
+  const next = i >= 0 && r.target != null ? await carryOver(q, i, r) : null;
+  toast(`Milestone conquered!${next ? " Next up: " + next.text : q && q.ms.every((m, j) => j === i || m.done) ? " Every milestone is done — claim your victory!" : ""}`, "good");
+}
 function bindMilestones(el) {
   bind(el, "[data-ms]", async d => {
     const r = await updateMilestone(d.p, +d.ms, d.op, +d.v || 0);
-    if (r.done && !r.wasDone) toast("Milestone conquered! Quest progress increased.", "good");
+    if (r.done && !r.wasDone) await reached(d.p, +d.ms, r);
   });
   el.querySelectorAll("[data-msin]").forEach(i => i.addEventListener("keydown", async ev => {
     if (ev.key !== "Enter") return;
@@ -1552,7 +1615,8 @@ function bindMilestones(el) {
     if (!isFinite(v)) return toast("Type a number first", "bad");
     try {
       const r = await updateMilestone(i.dataset.p, +i.dataset.msin, "add", v);
-      toast(r.done && !r.wasDone ? "Milestone conquered! Quest progress increased." : `Progress logged: ${v > 0 ? "+" : ""}${v} → ${fmt(r.cur)}/${fmt(r.target)}`, "good");
+      if (r.done && !r.wasDone) return reached(i.dataset.p, +i.dataset.msin, r);
+      toast(`Progress logged: ${v > 0 ? "+" : ""}${v} → ${fmt(r.cur)}/${fmt(r.target)}`, "good");
     } catch (e) { toast("⚠ " + e.message, "bad"); }
   }));
 }
@@ -1601,26 +1665,38 @@ function renderGoal() {
 }
 
 // Dashboard window: every active quest's milestones — log progress, tick them off, add new ones.
+// Quests show one milestone at a time: the current one, with a step counter. When it's done the next
+// one takes its place. The full list (and adding milestones) sits under "All milestones".
 function renderMilestones() {
-  const RANKS = ["S", "A", "B", "C", "D", "E"];
-  const act = quests.filter(isActive).sort(questOrder);   // same order as the Quests list; milestones keep the order they have in the quest
-  const showDone = !!OPTS.showDone;
-  const blocks = act.map((q, i) => {
-    const open = q.ms.filter(m => !m.done), done = q.ms.length - open.length;
-    return `<details class="sl-qblock" ${i < (OPTS.open ?? 3) ? "open" : ""}>
-      <summary><div class="sl-qhead small">${rankBadge(q.rank)}<div class="sl-qname">${lnk(q.path, q.name)}<div class="sl-meta">${done}/${q.ms.length} milestones${q.deadline ? " · deadline " + M(q.deadline).format("MMM D, YYYY") : ""}</div></div><div class="sl-qpct">${Math.round(q.pct * 100)}%</div>${edBtn(q.path)}</div>${bar(q.pct * 100, "quest")}</summary>
-      <div class="sl-mslist">${(showDone ? q.ms : open).map(m => msRow(m, q)).join("") || (claimBtn(q) || empty("No milestones yet — add one below."))}</div>${showDone ? claimBtn(q) : ""}
-      <div class="sl-msadd" data-q="${esc(q.path)}">
-        <input class="sl-addin" data-f="text" placeholder="New milestone, e.g. Run 10 km">
-        <input class="sl-addin num" data-f="target" type="number" step="any" min="0" placeholder="Target">
-        <input class="sl-addin unit" data-f="unit" placeholder="Unit">
-        <input class="sl-addin date" data-f="due" type="date" title="Due date">
-        <input class="sl-addin num" data-f="xp" type="number" min="0" placeholder="XP" value="25" title="XP when completed">
-        <button class="sl-btn xs" data-addms="1">＋ Add milestone</button>
-      </div></details>`;
+  const act = quests.filter(isActive).sort(questOrder);
+  const full = !!OPTS.full;
+  const openSet = window.__slOpenMs || (window.__slOpenMs = new Set());
+  const blocks = act.map(q => {
+    const idx = q.ms.findIndex(m => !m.done), cur = idx >= 0 ? q.ms[idx] : null, done = q.ms.filter(m => m.done).length;
+    const dots = q.ms.map((m, i) => `<i class="${m.done ? "on" : i === idx ? "cur" : ""}" title="${i + 1}. ${esc(m.text)}${m.done ? " ✔" : ""}"></i>`).join("");
+    const fed = habits.filter(h => h.active && h.quest && norm(h.quest) === norm(q.name));
+    return `<div class="sl-qblock">
+      <div class="sl-qhead small">${rankBadge(q.rank)}<div class="sl-qname">${lnk(q.path, q.name)}<div class="sl-meta">${q.area ? areaTag(q.area) : noAreaTag()}${q.deadline ? " · deadline " + M(q.deadline).format("MMM D, YYYY") : ""}</div></div><div class="sl-qpct">${Math.round(q.pct * 100)}%</div>${edBtn(q.path)}</div>
+      ${bar(q.pct * 100, "quest")}
+      ${q.ms.length ? `<div class="sl-steps"><span class="sl-meta">${cur ? `Milestone ${idx + 1} of ${q.ms.length}` : `All ${q.ms.length} milestones done`}</span><span class="sl-stepdots">${dots}</span></div>` : ""}
+      ${cur ? `<div class="sl-mslist sl-current">${msRow(cur, q)}</div>` : (claimBtn(q) || empty("No milestones yet — add one under “All milestones”."))}
+      ${fed.length ? `<div class="sl-meta sl-feeds">↳ fed by ${fed.map(h => `${h.icon ? ico(h.icon) + " " : ""}${esc(h.name)} (+${fmt(h.questAmount)}${cur && cur.unit ? " " + esc(cur.unit) : ""} each time)`).join(", ")}</div>` : ""}
+      ${noteLine(q.notes)}
+      <details class="sl-allms" data-q="${esc(q.path)}" ${openSet.has(q.path) ? "open" : ""}><summary>All milestones (${done}/${q.ms.length} done) &amp; add a milestone</summary>
+        <div class="sl-mslist">${q.ms.map(m => msRow(m, q)).join("") || empty("None yet.")}</div>
+        <div class="sl-msadd" data-q="${esc(q.path)}">
+          <input class="sl-addin" data-f="text" placeholder="New milestone, e.g. Run 10 km">
+          <input class="sl-addin num" data-f="target" type="number" step="any" min="0" placeholder="Target">
+          <input class="sl-addin unit" data-f="unit" placeholder="Unit">
+          <input class="sl-addin date" data-f="due" type="date" title="Due date">
+          <input class="sl-addin num" data-f="xp" type="number" min="0" placeholder="XP" value="25" title="XP when completed">
+          <button class="sl-btn xs" data-addms="1">＋ Add milestone</button>
+        </div></details>
+    </div>`;
   }).join("");
-  const el = mount(win("QUEST MILESTONES", blocks || empty("No active quests yet — create one with ＋ Quest, then add milestones here."), "", `${act.length} active quest${act.length === 1 ? "" : "s"}`));
+  const el = mount(win("QUESTS", (blocks || empty("No active quests yet — create one with ＋ Quest.")) + (full ? `<div class="sl-addrow">${addBox("quest")}</div>` : ""), "", `${act.length} active quest${act.length === 1 ? "" : "s"}`));
   bindMilestones(el);
+  el.querySelectorAll("details.sl-allms").forEach(d => d.addEventListener("toggle", () => { if (d.open) openSet.add(d.dataset.q); else openSet.delete(d.dataset.q); }));
   el.querySelectorAll(".sl-msadd").forEach(box => {
     const val = k => box.querySelector(`[data-f="${k}"]`).value;
     const go = async () => {
@@ -1633,6 +1709,10 @@ function renderMilestones() {
     box.querySelector("[data-addms]").addEventListener("click", ev => { ev.preventDefault(); go(); });
     box.querySelector('[data-f="text"]').addEventListener("keydown", ev => { if (ev.key === "Enter") { ev.preventDefault(); go(); } });
   });
+  if (full) {
+    const other = quests.filter(q => !isActive(q) && q.status !== "completed");
+    if (other.length) mount(win("DORMANT / ABANDONED", other.map(q => `<div class="sl-feedrow"><span class="sl-fd">${esc(q.status)}</span><span class="sl-fm">${lnk(q.path, q.name)} <span class="sl-meta">${Math.round(q.pct * 100)}%</span></span><button class="sl-btn xs ghost" data-restore="quest" data-p="${esc(q.path)}">Restore</button>${rmBtn("trash", q.path, "Delete", "Delete forever (moves to .trash)")}</div>`).join("")));
+  }
 }
 
 function renderBattle() {
@@ -1906,8 +1986,8 @@ function renderAreaNote() {
   if (!a) return mount(win("LIFE AREA", empty("This note needs <code>type: area</code>.")));
   const x = Math.max(0, areaXP[a.key] || 0);
   const hs = habits.filter(h => norm(h.area) === a.key), qs = quests.filter(q => norm(q.area) === a.key);
-  mount(win(`LIFE AREA · ${a.stat}`, `<div class="sl-chips">${chip(a.stat, 10 + Math.floor(x / 100), "gold")}${chip("All-time XP", fmt(x), "pos")}${chip("Habits", hs.length)}${chip("Quests", qs.length)}</div>
-    <div class="sl-meter"><span>NEXT ${esc(a.stat)}</span>${bar(x % 100, "xp")}<em>${x % 100}/100</em></div>
+  mount(win(`LIFE AREA · ${a.stat}`, `<div class="sl-chips">${chip(a.stat, statVal(x), "gold")}${chip("All-time XP", fmt(x), "pos")}${chip("Habits", hs.length)}${chip("Quests", qs.length)}</div>
+    <div class="sl-meter"><span>NEXT ${esc(a.stat)}</span>${bar(statPct(x), "xp")}<em>${statInto(x)}/${CFG.statStep}</em></div>
     <div class="sl-chtitle">Habits</div>${hs.map(h => `<div class="sl-feedrow k-${h.polarity === "good" ? "habit" : "bad"}"><span class="sl-fd">${h.polarity}</span><span class="sl-fm">${ico(h.icon)} ${lnk(h.path, h.name)}</span><span class="sl-fv">${h.polarity === "good" ? "+" : "−"}${h.xp}</span></div>`).join("") || empty("No habits linked (set <code>area:</code> on a habit).")}
     <div class="sl-chtitle">Quests</div>${qs.map(questCard).join("") || empty("No quests in this area yet.")}`));
 }

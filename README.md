@@ -5,7 +5,7 @@ A cozy, gamified life dashboard for [Obsidian](https://obsidian.md). Good habits
 Everything opens in its own dashboard tab — no Dataview, no daily notes, no clutter in your vault.
 
 ## Features
-- **Overview** — status window (level, rank, title, HP/EXP bars, stats), daily quest, penalty zone, side quests, quest milestones, XP chart, reward shop, life areas and a chronicle of everything you've earned.
+- **Overview** — status window (level, rank, title, HP/EXP bars, stats), daily quest, penalty zone, side quests, quests (one milestone at a time), XP chart, reward shop, life areas and a chronicle of everything you've earned.
 - **Habits** — complete good habits, log slips on bad ones. Streaks, clean streaks and a Daily Quest bonus for clearing every ★ habit.
 - **Quests** — main quests broken into measurable milestones (`current / target / unit`, XP, due date). Log progress with + / −, then **Claim victory**.
 - **Side quests** — one-off or repeating tasks ("Clean house" every Sunday, "Call doctor") with XP and an optional due date. Finished ones clear from the list the next day and stay in your history; repeating ones come back on their next date.
@@ -17,6 +17,9 @@ Everything opens in its own dashboard tab — no Dataview, no daily notes, no cl
 - **Profile** — character sheet with your own portrait and life areas (VIT, STR, AGI, INT, WIS…). Titles and jobs are earned as you level.
 - **HP & falling** — bad habits deal damage, good habits heal, you regenerate daily. Hit 0 HP and you lose a level.
 - **Edit anything in place** — every card has a ✎ pop-up for name, XP / cost, icon, cover image, notes, its own settings and Delete.
+
+- **Quests** — each quest shows only its current milestone; the next one moves up when it's done. Habits can count toward a quest (e.g. a daily chapter adds 0.1 books to *Read 12 Books*).
+- **Stats** — +1 per 50 XP earned in a life area (adjustable), with a progress bar to the next point.
 
 ## Install with BRAT (beta)
 1. Install **BRAT** from *Settings → Community plugins → Browse* and enable it.

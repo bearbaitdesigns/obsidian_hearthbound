@@ -198,7 +198,7 @@ class CodexBlock extends MarkdownRenderChild {
 const TABS = [
   ["overview", "Overview", ["creator", { section: "grid", widths: "minmax(360px,1.15fr) 2fr", cols: [["status", "time", "actions", { section: "chart", days: 14 }, { section: "rewards", limit: 4 }, "areas"], ["daily", "bad", { section: "sidequests", compact: true }, "milestones", { section: "feed", limit: 10 }]] }]],
   ["habits", "Habits", ["daily", "bad"]],
-  ["quests", "Quests", ["generator", "sidequests", "quests", { section: "milestones", open: 99, showDone: true }]],
+  ["quests", "Quests", ["generator", "sidequests", { section: "milestones", full: true }]],
   ["rewards", "Rewards", ["rewards"]],
   ["arcanium", "Arcanium", null, [
     ["library", "Quest Library", ["library", "codex", "queststats", "sidestats"]],
@@ -209,7 +209,7 @@ const TABS = [
   ["guide", "Guide", []],
 ];
 const RECORD_SECTION = { habit: "habit", goal: "goal", quest: "goal", reward: "reward", area: "area" };
-const HIDDEN_KEYS = new Set(["type", "cssclasses", "history", "claims", "position", "ui_icons", "focus", "setup_done"]);
+const HIDDEN_KEYS = new Set(["type", "cssclasses", "history", "claims", "position", "ui_icons", "focus", "setup_done", "completions", "next"]);
 
 class CodexView extends ItemView {
   constructor(leaf, plugin) { super(leaf); this.plugin = plugin; this.tab = "overview"; this.sub = {}; this.record = null; this.editing = false; this.stack = []; }

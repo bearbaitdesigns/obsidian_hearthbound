@@ -8,6 +8,8 @@ icon: 📖
 daily_quest: false
 active: true
 history: []
+quest: "[[Read 12 Books]]"
+quest_amount: 0.1
 cue: "20+ pages of a book."
 ---
 ```codex

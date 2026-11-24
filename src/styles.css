@@ -495,3 +495,30 @@ img.sl-ico { width: 1.15em; height: 1.15em; object-fit: contain; vertical-align:
 .theme-dark .sl-lvline .sl-rank-b { color: #c7a8f0; border-color: var(--sl-purple); }
 .theme-dark .sl-lvline .sl-rank-a { color: #e8954a; border-color: #d9730d; }
 .theme-dark .sl-lvline .sl-rank-s, .theme-dark .sl-lvline .sl-rank-legend { color: var(--sl-gold); border-color: var(--sl-gold); }
+
+/* stats: next-point progress */
+.sl-stat-bar { grid-column: 1 / -1; margin-top: 4px; }
+.sl-stat-bar .sl-bar { height: 5px; border-width: 1px; }
+.sl-csrow small { grid-column: 2 / -1; text-align: right; }
+.sl-csrow { grid-template-columns: 90px 1fr auto; row-gap: 0; }
+.sl-qarow { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.sl-areasel { flex: 0 1 170px; }
+.sl-add .sl-areasel { flex: 0 1 150px; }
+.sl-noarea { font-size: .78em; color: #e8954a; background: rgba(217,115,13,.12); padding: 1px 6px; border-radius: 3px; white-space: nowrap; }
+.sl-feeds { color: var(--sl-purple); }
+/* quests: one milestone at a time */
+.sl-steps { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0 2px; }
+.sl-stepdots { display: inline-flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.sl-stepdots i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #555; display: inline-block; }
+.sl-stepdots i.on { background: var(--sl-purple); border-color: var(--sl-purple); }
+.sl-stepdots i.cur { border-color: var(--sl-text); box-shadow: 0 0 0 2px rgba(255,255,255,.15); }
+.sl-current .sl-ms { border-bottom: none; background: #141414; border-radius: 6px; padding: 9px 8px; }
+.sl-allms { margin-top: 8px; }
+.sl-allms > summary { cursor: pointer; color: var(--sl-dim); font-size: .85em; list-style: none; }
+.sl-allms > summary::before { content: "▸ "; } .sl-allms[open] > summary::before { content: "▾ "; }
+.sl-allms > summary:hover { color: var(--sl-text); }
+.sl-qblock > .sl-qhead .sl-qname::before { content: none; }
+
+.sl-gen > summary { cursor: pointer; list-style: none; margin-bottom: 0; display: flex; justify-content: space-between; align-items: center; }
+.sl-gen > summary::-webkit-details-marker { display: none; }
+.sl-gen[open] > summary { margin-bottom: 10px; }
