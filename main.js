@@ -1611,7 +1611,7 @@ function msRow(m, q, compact) {
   const dueTxt = m.due ? (m.done ? M(m.due).format("MMM D") : overdue ? `overdue ${-daysFrom(TODAY, m.due)}d` : daysFrom(TODAY, m.due) === 0 ? "due today" : `${daysFrom(TODAY, m.due)}d left`) : "no date";
   const prog = m.target != null ? `<span class="sl-msnum">${fmt(m.cur)}<small>/${fmt(m.target)} ${esc(m.unit)}</small></span>` : "";
   const ctrls = m.target != null && !m.done
-    ? `<button class="sl-btn xs ghost" data-ms="${m.line}" data-p="${esc(m.path)}" data-op="add" data-v="${-m.step}">−</button><button class="sl-btn xs" data-ms="${m.line}" data-p="${esc(m.path)}" data-op="add" data-v="${m.step}">+${m.step}</button><input class="sl-msin" type="number" step="any" placeholder="log…" title="Type an amount and press Enter to log it" data-msin="${m.line}" data-p="${esc(m.path)}">`
+    ? `<button class="sl-btn xs ghost" data-ms="${m.line}" data-p="${esc(m.path)}" data-op="add" data-v="${-m.step}">−</button><button class="sl-btn xs" data-ms="${m.line}" data-p="${esc(m.path)}" data-op="add" data-v="${m.step}" title="Add ${fmt(m.step)} ${esc(m.unit)}">+${fmt(m.step)}${m.unit ? " " + esc(m.unit) : ""}</button><span class="sl-mslog"><input class="sl-msin" type="number" inputmode="decimal" step="any" placeholder="amount" title="Type an amount, then Log (or press Enter)" data-msin="${m.line}" data-p="${esc(m.path)}"><button class="sl-btn xs ghost" data-mslog="1">Log</button></span>`
     : "";
   return `<div class="sl-ms ${m.done ? "done" : ""} ${overdue ? "overdue" : ""}">
     <button class="sl-check" data-ms="${m.line}" data-p="${esc(m.path)}" data-op="toggle" title="Toggle complete">${m.done ? UI("check") : ""}</button>
@@ -1627,6 +1627,10 @@ function bindMilestones(el) {
   bind(el, "[data-ms]", async d => {
     const r = await updateMilestone(d.p, +d.ms, d.op, +d.v || 0);
     if (r.done && !r.wasDone) await reached(d.p, +d.ms, r);
+  });
+  el.querySelectorAll("[data-msin]").forEach(i => {
+    const btn = i.parentElement.querySelector("[data-mslog]");
+    if (btn) btn.addEventListener("click", ev => { ev.preventDefault(); ev.stopPropagation(); i.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" })); });
   });
   el.querySelectorAll("[data-msin]").forEach(i => i.addEventListener("keydown", async ev => {
     if (ev.key !== "Enter") return;

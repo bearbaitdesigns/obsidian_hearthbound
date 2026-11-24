@@ -192,7 +192,7 @@ img.sl-ico { width: 1.15em; height: 1.15em; object-fit: contain; vertical-align:
 .sl-msin { width: 72px; padding: 2px 6px !important; font-size: .8em; }
 .sl-bgroup { padding: 10px 0 14px; border-bottom: 1px solid var(--sl-line); }
 .sl-battletop { display: grid; grid-template-columns: 1.4fr 1fr; gap: 18px; align-items: start; }
-@media (max-width: 800px) { .sl-battletop { grid-template-columns: 1fr; } .sl-ms { grid-template-columns: 24px 1fr auto; } .sl-ms .sl-msxp, .sl-ms .sl-ctrls { display: none; } }
+@media (max-width: 800px) { .sl-battletop { grid-template-columns: 1fr; } .sl-ms { grid-template-columns: 24px 1fr auto; } .sl-ms .sl-msxp { display: none; } }
 .sl-qblock { border: 1px solid var(--sl-line); border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; background: var(--sl-card); }
 .sl-qblock > summary { cursor: pointer; list-style: none; }
 .sl-qblock > summary::-webkit-details-marker { display: none; }
@@ -522,3 +522,14 @@ img.sl-ico { width: 1.15em; height: 1.15em; object-fit: contain; vertical-align:
 .sl-gen > summary { cursor: pointer; list-style: none; margin-bottom: 0; display: flex; justify-content: space-between; align-items: center; }
 .sl-gen > summary::-webkit-details-marker { display: none; }
 .sl-gen[open] > summary { margin-bottom: 10px; }
+
+/* milestone progress controls */
+.sl-mslog { display: inline-flex; gap: 4px; align-items: center; }
+.sl-ctrls { display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+@media (max-width: 800px) {
+  .sl-ms .sl-ctrls { grid-column: 1 / -1; justify-content: flex-end; gap: 8px; margin-top: 2px; }
+  .sl-ms .sl-due { grid-column: 2; }
+  .sl-ms .sl-ctrls .sl-btn.xs { padding: 7px 12px !important; font-size: .95em; min-height: 36px; }
+  .sl-ms .sl-msin { width: 84px; padding: 7px 8px !important; font-size: .95em; min-height: 36px; }
+  .sl-ms .sl-ed { opacity: .85; font-size: 1.1em; padding: 6px; }
+}
